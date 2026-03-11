@@ -1415,7 +1415,7 @@ input {
 #player-bg {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #1a0d2e 0%, #08050f 70%);
+  background: linear-gradient(180deg, #1a0d2e 0%, #08050f 60%, #08050f 100%);
   z-index: 0;
   pointer-events: none;
 }
@@ -1425,7 +1425,7 @@ input {
   top: 0;
   left: 0;
   right: 0;
-  height: 52%;
+  height: 60%;
   background: linear-gradient(135deg, #2d1b69, #4c1d95, #7c3aed);
   display: flex;
   align-items: center;
@@ -1448,7 +1448,7 @@ input {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 130px;
+  height: 180px;
   background: linear-gradient(0deg, var(--bg) 0%, transparent 100%);
 }
 

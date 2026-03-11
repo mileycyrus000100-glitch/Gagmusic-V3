@@ -514,15 +514,48 @@ const Library = {
   /* Extraire titre/artiste depuis le nom du fichier */
   parseFileName(fileName) {
     try {
-      // Retirer extension
-      let name = fileName.replace(/\.[^.]+$/, '');
+      let name = fileName.replace(/\.[^.]+$/, ''); // retirer extension
 
-      // Retirer hashtags (#mot #mot2 ...)
-      name = name.replace(/#\S+/g, '').trim();
+      // ── Mots parasites à supprimer (insensible à la casse) ───────────
+      const NOISE = [
+        'official audio', 'official video', 'official music video', 'official mv',
+        'official lyric video', 'official visualizer', 'official clip',
+        'music video', 'lyric video', 'lyrics video',
+        'visualizer', 'visualiser',
+        'audio', 'video', 'clip',
+        'clean version', 'clean edit', 'clean radio edit', 'radio edit',
+        'explicit version', 'explicit',
+        'extended version', 'extended mix',
+        'remastered', 'remaster',
+        'hd', 'hq', '4k', '1080p', '720p',
+        'lyrics', 'paroles',
+      ];
 
-      // Retirer qualité audio entre parenthèses/crochets ex: (256k) (320kbps) [FLAC]
-      name = name.replace(/[\(\[]\s*\d+\s*k(bps|hz)?\s*[\)\]]/gi, '').trim();
-      name = name.replace(/[\(\[]\s*(flac|mp3|aac|ogg|hd|hq)\s*[\)\]]/gi, '').trim();
+      // Retirer mots parasites entre parenthèses/crochets d'abord
+      name = name.replace(/[\(\[][^\)\]]*[\)\]]/gi, s => {
+        const inner = s.slice(1, -1).trim().toLowerCase();
+        if (NOISE.some(n => inner.includes(n))) return '';
+        // Garder si c'est un feat
+        if (/^(ft\.?|feat\.?|featuring)/i.test(inner)) return s;
+        // Retirer qualité audio
+        if (/^\d+\s*k(bps|hz)?$/.test(inner)) return '';
+        if (/^(flac|mp3|aac|ogg|wav)$/.test(inner)) return '';
+        return s;
+      });
+
+      // Retirer mots parasites hors parenthèses
+      const noiseReg = new RegExp(
+        '\\b(' + NOISE.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b',
+        'gi'
+      );
+      name = name.replace(noiseReg, '');
+
+      // Retirer qualité audio sans parenthèses : 256k 320kbps etc.
+      name = name.replace(/\b\d+\s*k(bps|hz)?\b/gi, '');
+      name = name.replace(/\b(flac|mp3|aac|ogg|wav)\b/gi, '');
+
+      // Retirer hashtags
+      name = name.replace(/#\S+/g, '');
 
       // Retirer numéro de piste au début
       name = name.replace(/^\d+[\.\-\s]+/, '');
@@ -530,11 +563,12 @@ const Library = {
       // Remplacer underscores par espaces
       name = name.replace(/_/g, ' ');
 
-      // Normaliser les espaces multiples
-      name = name.replace(/\s+/g, ' ').trim();
+      // Normaliser espaces et ponctuation traînante
+      name = name.replace(/[\s,\-–—]+$/, '').replace(/^[\s,\-–—]+/, '').replace(/\s+/g, ' ').trim();
 
-      // Séparateurs possibles : " - ", " – ", " — " (tiret court, long, cadratin)
-      const sepMatch = name.match(/^(.+?)\s+[–—-]\s+(.+)$/);
+      // ── Découpage artiste / titre ────────────────────────────────────
+      // Séparateur " - " ou " – " ou " — "
+      const sepMatch = name.match(/^(.+?)\s+[-–—]\s+(.+)$/);
       if (sepMatch) {
         return {
           artist: sepMatch[1].trim(),
@@ -543,7 +577,8 @@ const Library = {
         };
       }
 
-      // Pas de séparateur → tout est le titre
+      // Pas de séparateur → titre = nom complet, artiste = Inconnu
+      // fetchMetadata corrigera via Last.fm / iTunes
       return {
         artist: 'Inconnu',
         title:  name || fileName,
