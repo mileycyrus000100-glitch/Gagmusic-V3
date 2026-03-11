@@ -274,55 +274,103 @@ const Library = {
     }
   },
 
-  /* Chercher métadonnées via Last.fm */
+  /* Chercher métadonnées via Last.fm puis iTunes pour la cover */
   async fetchMetadata(song) {
     try {
       if (!song || !navigator.onLine) return;
 
       const API_KEY = '40bc3f6da0ab7f2cf73ec36834d75262';
-      const title   = encodeURIComponent(song.title  || '');
-      const artist  = encodeURIComponent(song.artist || '');
+      let title  = song.title  || '';
+      let artist = song.artist || '';
 
-      if (!title || song.artist === 'Inconnu') return;
+      if (!title) return;
 
-      // Proxy CORS pour GitHub Pages (à supprimer pour Android)
       const base = 'https://corsproxy.io/?';
-      const url  = base + encodeURIComponent(
-        `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${artist}&track=${title}&format=json`
-      );
 
-      const res = await fetch(url);
-      if (!res.ok) return;
+      // ── Étape 1 : Last.fm pour artiste + album + genre ──────────────
+      try {
+        let lfmUrl;
+        if (!artist || artist === 'Inconnu') {
+          lfmUrl = base + encodeURIComponent(
+            `https://ws.audioscrobbler.com/2.0/?method=track.search&api_key=${API_KEY}&track=${encodeURIComponent(title)}&format=json&limit=1`
+          );
+        } else {
+          lfmUrl = base + encodeURIComponent(
+            `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&format=json`
+          );
+        }
 
-      const data = await res.json();
-      if (!data || !data.track) return;
+        const lfmRes = await fetch(lfmUrl);
+        if (lfmRes.ok) {
+          const lfmData = await lfmRes.json();
 
-      const track = data.track;
+          if (lfmData && lfmData.track) {
+            // track.getInfo
+            const track = lfmData.track;
+            if (track.album) song.album = track.album.title || song.album;
+            if (track.toptags && track.toptags.tag && track.toptags.tag[0]) {
+              song.genre = track.toptags.tag[0].name || '';
+            }
+            if (track.duration && !song.duration) {
+              song.duration = parseInt(track.duration) / 1000;
+            }
+            // Pochette Last.fm (souvent vide — on complète avec iTunes après)
+            if (track.album && track.album.image) {
+              const img = track.album.image.find(i => i.size === 'extralarge' || i.size === 'large');
+              if (img && img['#text'] && !img['#text'].includes('2a96cbd8b46e442fc41c2b86b821562f')) {
+                song.cover = img['#text']; // image placeholder Last.fm à exclure
+              }
+            }
 
-      // Album + pochette
-      if (track.album) {
-        song.album = track.album.title || song.album;
-        const images = track.album.image || [];
-        const large  = images.find(img => img.size === 'extralarge' || img.size === 'large');
-        if (large && large['#text']) song.cover = large['#text'];
+          } else if (lfmData && lfmData.results && lfmData.results.trackmatches) {
+            // track.search
+            const match = lfmData.results.trackmatches.track;
+            const first = Array.isArray(match) ? match[0] : match;
+            if (first) {
+              if ((!artist || artist === 'Inconnu') && first.artist) {
+                song.artist = first.artist;
+                artist = first.artist;
+              }
+              if (first.name) { song.title = first.name; title = first.name; }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Library] Last.fm:', e.message);
       }
 
-      // Genre
-      if (track.toptags && track.toptags.tag && track.toptags.tag[0]) {
-        song.genre = track.toptags.tag[0].name || '';
+      // ── Étape 2 : iTunes Search pour la pochette (très fiable) ──────
+      if (!song.cover) {
+        try {
+          const q   = encodeURIComponent((artist && artist !== 'Inconnu' ? artist + ' ' : '') + title);
+          const url = base + encodeURIComponent(`https://itunes.apple.com/search?term=${q}&media=music&limit=1`);
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.results && data.results[0]) {
+              const result = data.results[0];
+              // artworkUrl100 → remplacer par 600x600
+              const art = (result.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+              if (art) song.cover = art;
+              // Compléter les métadonnées manquantes
+              if (!song.album  && result.collectionName)  song.album  = result.collectionName;
+              if (!song.genre  && result.primaryGenreName) song.genre = result.primaryGenreName;
+              if ((!artist || artist === 'Inconnu') && result.artistName) {
+                song.artist = result.artistName;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[Library] iTunes:', e.message);
+        }
       }
 
-      // Durée
-      if (track.duration && !song.duration) {
-        song.duration = parseInt(track.duration) / 1000;
-      }
-
+      // ── Sauvegarder et rafraîchir ────────────────────────────────────
       this.buildIndex();
       this.saveToStorage();
       this.renderBiblio();
-
-      if (typeof showToast === 'function') showToast('✓ Métadonnées : ' + song.title);
-      console.log('[Library] Métadonnées récupérées:', song.title);
+      if (typeof showToast === 'function') showToast('✓ ' + (song.title || title));
+      console.log('[Library] Métadonnées:', song.title, '| cover:', !!song.cover);
 
     } catch (e) {
       console.warn('[Library] Erreur fetchMetadata:', e.message);
@@ -365,24 +413,28 @@ const Library = {
       // Retirer extension
       let name = fileName.replace(/\.[^.]+$/, '');
 
-      // Formats courants :
-      // "Artiste - Titre"
-      // "Titre"
-      // "01. Artiste - Titre"
-      // "Artiste_Titre"
+      // Retirer hashtags (#mot #mot2 ...)
+      name = name.replace(/#\S+/g, '').trim();
+
+      // Retirer qualité audio entre parenthèses/crochets ex: (256k) (320kbps) [FLAC]
+      name = name.replace(/[\(\[]\s*\d+\s*k(bps|hz)?\s*[\)\]]/gi, '').trim();
+      name = name.replace(/[\(\[]\s*(flac|mp3|aac|ogg|hd|hq)\s*[\)\]]/gi, '').trim();
 
       // Retirer numéro de piste au début
       name = name.replace(/^\d+[\.\-\s]+/, '');
 
       // Remplacer underscores par espaces
-      name = name.replace(/_/g, ' ').trim();
+      name = name.replace(/_/g, ' ');
 
-      // Séparation Artiste - Titre
-      const dashIdx = name.indexOf(' - ');
-      if (dashIdx > 0) {
+      // Normaliser les espaces multiples
+      name = name.replace(/\s+/g, ' ').trim();
+
+      // Séparateurs possibles : " - ", " – ", " — " (tiret court, long, cadratin)
+      const sepMatch = name.match(/^(.+?)\s+[–—-]\s+(.+)$/);
+      if (sepMatch) {
         return {
-          artist: name.slice(0, dashIdx).trim(),
-          title:  name.slice(dashIdx + 3).trim(),
+          artist: sepMatch[1].trim(),
+          title:  sepMatch[2].trim(),
           album:  '',
         };
       }
