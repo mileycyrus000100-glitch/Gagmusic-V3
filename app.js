@@ -91,14 +91,11 @@ function initTabs() {
 
 function switchTab(name) {
   try {
-    // Fermer les sous-écrans ouverts
     closeAllSubscreens();
 
-    // Désactiver tous les onglets
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
 
-    // Activer le bon onglet
     const tab    = document.querySelector(`.tab[data-tab="${name}"]`);
     const screen = document.getElementById('screen-' + name);
 
@@ -106,9 +103,17 @@ function switchTab(name) {
     if (screen) screen.classList.add('active');
 
     App.currentTab = name;
-
-    // Mettre à jour la pile historique
     App.historyStack.push({ type: 'tab', name });
+
+    // Cacher le mini lecteur sur l'onglet Ensemble
+    const mini = document.getElementById('mini-player');
+    if (mini) {
+      if (name === 'ensemble') {
+        mini.style.display = 'none';
+      } else {
+        mini.style.display = '';
+      }
+    }
 
     console.log('[App] Onglet:', name);
   } catch (e) {
@@ -158,33 +163,37 @@ function initHeader() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   LECTEUR PLEIN ÉCRAN
+   LECTEUR PLEIN ÉCRAN — CARROUSEL 3 VUES
    ═══════════════════════════════════════════════════════ */
+
+let playerView    = 1; // 0=infos 1=main 2=paroles
+let inactiveTimer = null;
+
 function initPlayer() {
   try {
-    // Bouton fermer
-    const btnDown = document.getElementById('player-down');
-    if (btnDown) btnDown.addEventListener('click', closePlayer);
+    // Fermer (toutes les vues)
+    ['player-down','player-down-infos','player-down-paroles'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', closePlayer);
+    });
 
-    // Bouton options ···
-    const btnMenu = document.getElementById('player-menu-btn');
-    if (btnMenu) {
-      btnMenu.addEventListener('click', () => {
+    // Options ···
+    ['player-menu-btn','player-menu-btn-infos'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', () => {
         showContextMenu([
-          { icon: '▶', label: 'Lire ensuite',        action: () => showToast('Ajouté après la chanson en cours') },
-          { icon: '⊕', label: 'Ajouter à la file',   action: () => showToast('Ajouté à la file') },
-          { icon: '🎵', label: 'Ajouter à playlist',  action: () => showToast('Choisir une playlist...') },
-          { icon: '👤', label: 'Voir artiste',         action: () => { closePlayer(); switchTab('artistes'); } },
-          { icon: '💿', label: 'Voir album',           action: () => showToast('Album...') },
-          { icon: '✎',  label: 'Modifier les infos',  action: () => showToast('Modifier...') },
-          { icon: '🔗', label: 'Partager → Ensemble', action: () => showToast('Partage en cours...') },
+          { icon:'▶', label:'Lire ensuite',       action: () => showToast('Ajouté après la chanson en cours') },
+          { icon:'⊕', label:'Ajouter à la file',  action: () => showToast('Ajouté à la file') },
+          { icon:'🎵',label:'Ajouter à playlist', action: () => showToast('Choisir une playlist...') },
+          { icon:'👤',label:'Voir artiste',        action: () => { closePlayer(); switchTab('artistes'); } },
+          { icon:'✎', label:'Modifier les infos', action: () => showToast('Modifier...') },
           { separator: true },
-          { icon: '🗑', label: 'Supprimer',            action: () => showToast('Supprimer ?'), danger: true },
+          { icon:'🗑', label:'Supprimer',          action: () => showToast('Supprimer ?'), danger: true },
         ]);
       });
-    }
+    });
 
-    // Bouton like
+    // Like
     const btnLike = document.getElementById('btn-like');
     if (btnLike) {
       btnLike.addEventListener('click', () => {
@@ -195,64 +204,98 @@ function initPlayer() {
       });
     }
 
-    // Bouton file d'attente
-    const btnQueue = document.getElementById('btn-queue');
-    if (btnQueue) {
-      btnQueue.addEventListener('click', () => showToast('⊕ Ajouté à la file'));
-    }
+    // Boutons contrôles
+    document.getElementById('btn-queue')?.addEventListener('click', () => showToast('⊕ Ajouté à la file'));
+    document.getElementById('btn-options')?.addEventListener('click', () => document.getElementById('player-menu-btn')?.click());
+    document.getElementById('btn-play-main')?.addEventListener('click', togglePlay);
+    document.getElementById('btn-prev')?.addEventListener('click', () => { if (typeof Player !== 'undefined' && Player.prev) Player.prev(); });
+    document.getElementById('btn-next')?.addEventListener('click', () => { if (typeof Player !== 'undefined' && Player.next) Player.next(); });
+    document.getElementById('btn-rewind')?.addEventListener('click',  () => { if (typeof Player !== 'undefined') Player.seekRelative(-10); });
+    document.getElementById('btn-forward')?.addEventListener('click', () => { if (typeof Player !== 'undefined') Player.seekRelative(10); });
+    document.getElementById('btn-queue-panel')?.addEventListener('click', openQueuePanel);
 
-    // Bouton options du bas
-    const btnOptions = document.getElementById('btn-options');
-    if (btnOptions) {
-      btnOptions.addEventListener('click', () => {
-        if (document.getElementById('player-menu-btn')) {
-          document.getElementById('player-menu-btn').click();
-        }
-      });
-    }
-
-    // Bouton play principal
-    const btnPlayMain = document.getElementById('btn-play-main');
-    if (btnPlayMain) {
-      btnPlayMain.addEventListener('click', togglePlay);
-    }
-
-    // Boutons prev/next
-    const btnPrev = document.getElementById('btn-prev');
-    const btnNext = document.getElementById('btn-next');
-    if (btnPrev) btnPrev.addEventListener('click', () => {
-      if (typeof Player !== 'undefined' && Player.prev) Player.prev();
-      else showToast('⏮ Précédent');
-    });
-    if (btnNext) btnNext.addEventListener('click', () => {
-      if (typeof Player !== 'undefined' && Player.next) Player.next();
-      else showToast('⏭ Suivant');
-    });
-
-    // Boutons skip
-    const btnRewind  = document.getElementById('btn-rewind');
-    const btnForward = document.getElementById('btn-forward');
-    if (btnRewind)  btnRewind.addEventListener('click',  () => showToast('⏪ -10s'));
-    if (btnForward) btnForward.addEventListener('click', () => showToast('⏩ +10s'));
-
-    // Bouton shuffle
+    // Shuffle
     const btnShuffle = document.getElementById('btn-shuffle');
     if (btnShuffle) {
       btnShuffle.addEventListener('click', () => {
+        if (typeof Player !== 'undefined') Player.toggleShuffle();
         btnShuffle.classList.toggle('active');
-        showToast(btnShuffle.classList.contains('active') ? '🔀 Aléatoire activé' : 'Aléatoire désactivé');
       });
     }
 
-    // Bouton file panneau
-    const btnQueuePanel = document.getElementById('btn-queue-panel');
-    if (btnQueuePanel) btnQueuePanel.addEventListener('click', () => showToast('≋ File d\'attente'));
+    // Boutons paroles (EQ, sync, traduction)
+    initParolesButtons();
 
-    // Swipe pour fermer (glisser vers le bas)
+    // EQ presets
+    document.querySelectorAll('.eq-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.eq-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (typeof Lyrics !== 'undefined' && Lyrics.applyEQPreset) Lyrics.applyEQPreset(btn.dataset.preset);
+      });
+    });
+
+    // Sync
+    document.getElementById('sync-minus')?.addEventListener('click', () => { if (typeof Lyrics !== 'undefined') Lyrics.adjustSync(-0.5); });
+    document.getElementById('sync-plus')?.addEventListener('click',  () => { if (typeof Lyrics !== 'undefined') Lyrics.adjustSync(0.5); });
+    document.getElementById('sync-auto')?.addEventListener('click',  () => { if (typeof Lyrics !== 'undefined') Lyrics.resetSync(); });
+
+    // Taille police
+    document.querySelectorAll('.font-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (typeof Lyrics !== 'undefined') Lyrics.setFontSize(btn.dataset.size);
+      });
+    });
+
+    // Swipe carrousel + bas fermer
     initPlayerSwipe();
+
+    // Mode inactif
+    initInactiveMode();
 
   } catch (e) {
     console.error('[App] Erreur initPlayer:', e);
+  }
+}
+
+function initParolesButtons() {
+  try {
+    const btnEQ     = document.getElementById('btn-eq');
+    const btnSync   = document.getElementById('btn-sync');
+    const btnTrad   = document.getElementById('btn-translate');
+    const panelSon  = document.getElementById('panel-son');
+    const panelSync = document.getElementById('panel-sync');
+
+    btnEQ?.addEventListener('click', () => {
+      const open = !panelSon?.classList.contains('hidden');
+      panelSon?.classList.toggle('hidden', open);
+      panelSync?.classList.add('hidden');
+      btnEQ.classList.toggle('active', !open);
+    });
+
+    btnSync?.addEventListener('click', () => {
+      const open = !panelSync?.classList.contains('hidden');
+      panelSync?.classList.toggle('hidden', open);
+      panelSon?.classList.add('hidden');
+      btnSync?.classList.toggle('active', !open);
+    });
+
+    btnTrad?.addEventListener('click', () => {
+      btnTrad.classList.toggle('active');
+      if (typeof Lyrics !== 'undefined') Lyrics.translate();
+    });
+
+    // Clic ligne → seek
+    document.getElementById('paroles-list')?.addEventListener('click', (e) => {
+      const line = e.target.closest('.paroles-line');
+      if (!line) return;
+      const time = parseFloat(line.dataset.time || 0);
+      if (typeof Player !== 'undefined' && Player.seek) Player.seek(time);
+    });
+  } catch (e) {
+    console.error('[App] Erreur initParolesButtons:', e);
   }
 }
 
@@ -262,6 +305,7 @@ function openPlayer() {
     if (screen) {
       screen.classList.add('open');
       App.historyStack.push({ type: 'player' });
+      resetInactiveTimer();
     }
   } catch (e) {
     console.error('[App] Erreur openPlayer:', e);
@@ -271,7 +315,12 @@ function openPlayer() {
 function closePlayer() {
   try {
     const screen = document.getElementById('player-screen');
-    if (screen) screen.classList.remove('open');
+    if (screen) {
+      screen.classList.remove('open');
+      screen.classList.remove('inactive');
+    }
+    clearTimeout(inactiveTimer);
+    if (typeof Lyrics !== 'undefined' && Lyrics.releaseWakeLock) Lyrics.releaseWakeLock();
   } catch (e) {
     console.error('[App] Erreur closePlayer:', e);
   }
@@ -279,48 +328,50 @@ function closePlayer() {
 
 function togglePlay() {
   try {
-    App.isPlaying = !App.isPlaying;
-    const btnMain  = document.getElementById('btn-play-main');
-    const btnMini  = document.getElementById('mini-play');
-    const vinyl    = document.getElementById('vinyl');
-    const icon     = App.isPlaying ? '⏸' : '▶';
-
-    if (btnMain) btnMain.textContent = icon;
-    if (btnMini) btnMini.textContent = icon;
-
-    // Pause/reprise animation vinyle
-    if (vinyl) {
-      vinyl.style.animationPlayState = App.isPlaying ? 'running' : 'paused';
-    }
-
     if (typeof Player !== 'undefined' && Player.togglePlay) {
       Player.togglePlay();
+    } else {
+      App.isPlaying = !App.isPlaying;
+      const icon = App.isPlaying ? '⏸' : '▶';
+      document.getElementById('btn-play-main')?.setAttribute('textContent', icon);
+      document.getElementById('mini-play')?.setAttribute('textContent', icon);
     }
+    resetInactiveTimer();
   } catch (e) {
     console.error('[App] Erreur togglePlay:', e);
   }
 }
 
-/* Swipe bas pour fermer le lecteur */
+/* ── Carrousel + swipe bas ── */
 function initPlayerSwipe() {
   try {
     const screen = document.getElementById('player-screen');
     if (!screen) return;
 
-    let startY = 0;
-    let startTime = 0;
+    let startX = 0, startY = 0, startTime = 0;
 
     screen.addEventListener('touchstart', (e) => {
+      startX    = e.touches[0].clientX;
       startY    = e.touches[0].clientY;
       startTime = Date.now();
+      // Sortir du mode inactif
+      screen.classList.remove('inactive');
+      resetInactiveTimer();
     }, { passive: true });
 
     screen.addEventListener('touchend', (e) => {
-      const dy       = e.changedTouches[0].clientY - startY;
-      const dt       = Date.now() - startTime;
-      const velocity = dy / dt;
-      // Swipe bas rapide ou grand déplacement → fermer
-      if (dy > 80 || velocity > 0.5) {
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      const dt = Date.now() - startTime;
+      const vx = Math.abs(dx) / dt;
+      const vy = dy / dt;
+      const horizontal = Math.abs(dx) > Math.abs(dy);
+
+      if (horizontal && (Math.abs(dx) > 50 || vx > 0.3)) {
+        // Swipe horizontal → changer vue
+        setPlayerView(dx < 0 ? Math.min(playerView + 1, 2) : Math.max(playerView - 1, 0));
+      } else if (!horizontal && (dy > 80 || vy > 0.4) && playerView === 1) {
+        // Swipe bas sur vue principale → fermer
         closePlayer();
       }
     }, { passive: true });
@@ -329,6 +380,124 @@ function initPlayerSwipe() {
     console.error('[App] Erreur initPlayerSwipe:', e);
   }
 }
+
+function setPlayerView(view) {
+  try {
+    playerView = view;
+    const carousel = document.getElementById('player-carousel');
+    if (carousel) {
+      carousel.classList.remove('view-0','view-1','view-2');
+      carousel.classList.add('view-' + view);
+    }
+
+    // Dots
+    ['dot-infos','dot-main','dot-paroles'].forEach((id, i) => {
+      document.getElementById(id)?.classList.toggle('active', i === view);
+    });
+
+    // Vue paroles → WakeLock + charger
+    if (view === 2) {
+      if (typeof Lyrics !== 'undefined' && Lyrics.requestWakeLock) Lyrics.requestWakeLock();
+      renderParolesView();
+    } else {
+      if (typeof Lyrics !== 'undefined' && Lyrics.releaseWakeLock) Lyrics.releaseWakeLock();
+    }
+
+    // Vue infos → remplir
+    if (view === 0) renderInfosView();
+
+  } catch (e) {
+    console.error('[App] Erreur setPlayerView:', e);
+  }
+}
+
+function renderInfosView() {
+  try {
+    const song = (typeof Player !== 'undefined') ? Player.currentSong : null;
+    if (!song) return;
+    const stats = (typeof Library !== 'undefined') ? (Library.stats[song.id] || {}) : {};
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+    set('info-title',    song.title);
+    set('info-artist',   song.artist);
+    set('info-album',    song.album);
+    set('info-genre',    song.genre);
+    set('info-duration', typeof formatTime === 'function' ? formatTime(song.duration) : '—');
+    set('info-plays',    stats.plays || 0);
+    set('info-added',    song.addedAt ? new Date(song.addedAt).toLocaleDateString('fr-FR') : '—');
+    set('info-file',     song.fileName || '—');
+  } catch (e) {
+    console.error('[App] Erreur renderInfosView:', e);
+  }
+}
+
+function renderParolesView() {
+  try {
+    const list = document.getElementById('paroles-list');
+    if (!list) return;
+
+    const song = (typeof Player !== 'undefined') ? Player.currentSong : null;
+    if (song) {
+      const titleEl = document.getElementById('paroles-song-title');
+      if (titleEl) titleEl.textContent = song.title || 'PAROLES';
+    }
+
+    const lines = (typeof Lyrics !== 'undefined' && Lyrics.lines) ? Lyrics.lines : [];
+
+    if (!lines.length) {
+      list.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:40px 0;">Paroles en cours de chargement...</div>';
+      if (song && typeof Lyrics !== 'undefined') Lyrics.load(song);
+      return;
+    }
+
+    list.innerHTML = '';
+    lines.forEach((line) => {
+      const el = document.createElement('div');
+      el.className = 'paroles-line';
+      el.dataset.time = line.time || 0;
+      el.textContent  = line.text || '';
+      list.appendChild(el);
+    });
+  } catch (e) {
+    console.error('[App] Erreur renderParolesView:', e);
+  }
+}
+
+/* Mise à jour ligne active paroles (appelé par Lyrics) */
+function updateParolesActive(lineIndex) {
+  try {
+    if (playerView !== 2) return;
+    const lines = document.querySelectorAll('.paroles-line');
+    lines.forEach((el, i) => {
+      el.classList.remove('active','next');
+      if (i === lineIndex)     el.classList.add('active');
+      if (i === lineIndex + 1) el.classList.add('next');
+    });
+    document.querySelector('.paroles-line.active')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  } catch (e) {}
+}
+
+/* ── Mode inactif 10s ── */
+function initInactiveMode() {
+  try {
+    const screen = document.getElementById('player-screen');
+    if (!screen) return;
+    screen.addEventListener('touchstart', () => {
+      screen.classList.remove('inactive');
+      resetInactiveTimer();
+    }, { passive: true });
+  } catch (e) {}
+}
+
+function resetInactiveTimer() {
+  try {
+    clearTimeout(inactiveTimer);
+    inactiveTimer = setTimeout(() => {
+      const screen = document.getElementById('player-screen');
+      if (screen?.classList.contains('open')) screen.classList.add('inactive');
+    }, 10000);
+  } catch (e) {}
+}
+
 
 /* ═══════════════════════════════════════════════════════
    MINI LECTEUR
@@ -435,17 +604,69 @@ function updateProgress(current, total) {
    ═══════════════════════════════════════════════════════ */
 function initSettings() {
   try {
-    const screen     = document.getElementById('settings-screen');
-    const btnBack    = document.getElementById('back-settings');
-    const btnStyle   = document.getElementById('settings-style');
-    const btnCompte  = document.getElementById('settings-compte');
+    const btnBack   = document.getElementById('back-settings');
+    const btnStyle  = document.getElementById('settings-style');
+    const btnCompte = document.getElementById('settings-compte');
+    const btnTheme  = document.getElementById('settings-theme');
+    const btnQuality= document.getElementById('settings-quality');
 
-    if (btnBack)   btnBack.addEventListener('click',  closeSettings);
-    if (btnStyle)  btnStyle.addEventListener('click', openStyle);
-    if (btnCompte) btnCompte.addEventListener('click', () => showToast('Connexion bientôt disponible'));
+    if (btnBack)    btnBack.addEventListener('click', closeSettings);
+    if (btnStyle)   btnStyle.addEventListener('click', openStyle);
+    if (btnCompte)  btnCompte.addEventListener('click', () => showToast('Connexion bientôt disponible'));
+
+    // Thème clair / sombre
+    if (btnTheme) {
+      btnTheme.addEventListener('click', () => {
+        App.isDark = !App.isDark;
+        applyTheme(App.isDark);
+        savePreferences();
+      });
+    }
+
+    // Qualité stream
+    if (btnQuality) {
+      const qualities = ['Auto', 'Haute', 'Basse'];
+      btnQuality.addEventListener('click', () => {
+        const valEl = document.getElementById('quality-value');
+        const cur   = qualities.indexOf(valEl?.textContent || 'Auto');
+        const next  = qualities[(cur + 1) % qualities.length];
+        if (valEl) valEl.textContent = next;
+        showToast('Stream : ' + next);
+        savePreferences();
+      });
+    }
 
   } catch (e) {
     console.error('[App] Erreur initSettings:', e);
+  }
+}
+
+function applyTheme(dark) {
+  try {
+    const iconEl  = document.getElementById('theme-icon');
+    const valueEl = document.getElementById('theme-value');
+
+    if (dark) {
+      document.documentElement.style.setProperty('--bg',   '#0a0a0f');
+      document.documentElement.style.setProperty('--bg2',  '#12121a');
+      document.documentElement.style.setProperty('--bg3',  '#1a1a26');
+      document.documentElement.style.setProperty('--text', '#ffffff');
+      document.documentElement.style.setProperty('--text2','#c4c4d4');
+      document.documentElement.style.setProperty('--text3','#6b6b8a');
+      if (iconEl)  iconEl.textContent  = '🌙';
+      if (valueEl) valueEl.textContent = 'Sombre';
+    } else {
+      document.documentElement.style.setProperty('--bg',   '#f0f0f8');
+      document.documentElement.style.setProperty('--bg2',  '#e4e4f0');
+      document.documentElement.style.setProperty('--bg3',  '#d8d8e8');
+      document.documentElement.style.setProperty('--text', '#0a0a1a');
+      document.documentElement.style.setProperty('--text2','#2a2a3a');
+      document.documentElement.style.setProperty('--text3','#6a6a8a');
+      if (iconEl)  iconEl.textContent  = '☀️';
+      if (valueEl) valueEl.textContent = 'Clair';
+    }
+  } catch (e) {
+    console.error('[App] Erreur applyTheme:', e);
   }
 }
 
@@ -1070,3 +1291,137 @@ window.openSubscreen    = openSubscreen;
 window.closeSubscreen   = closeSubscreen;
 window.formatTime       = formatTime;
 window.switchTab        = switchTab;
+
+/* ═══════════════════════════════════════════════════════
+   FILE D'ATTENTE
+   ═══════════════════════════════════════════════════════ */
+
+function openQueuePanel() {
+  try {
+    const panel   = document.getElementById('queue-panel');
+    const overlay = document.getElementById('queue-overlay');
+    if (!panel) return;
+
+    panel.classList.remove('hidden');
+    overlay?.classList.remove('hidden');
+
+    // Légère pause pour déclencher la transition CSS
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        panel.classList.add('open');
+      });
+    });
+
+    renderQueueList();
+
+    // Fermer via overlay
+    overlay?.addEventListener('click', closeQueuePanel, { once: true });
+
+    // Fermer via bouton
+    document.getElementById('queue-close')?.addEventListener('click', closeQueuePanel, { once: true });
+
+  } catch (e) {
+    console.error('[App] Erreur openQueuePanel:', e);
+  }
+}
+
+function closeQueuePanel() {
+  try {
+    const panel   = document.getElementById('queue-panel');
+    const overlay = document.getElementById('queue-overlay');
+    panel?.classList.remove('open');
+    setTimeout(() => {
+      panel?.classList.add('hidden');
+      overlay?.classList.add('hidden');
+    }, 300);
+  } catch (e) {}
+}
+
+function renderQueueList() {
+  try {
+    const list = document.getElementById('queue-list');
+    if (!list) return;
+
+    const queue   = (typeof Player !== 'undefined') ? (Player.queue || []) : [];
+    const current = (typeof Player !== 'undefined') ? Player.currentIndex : 0;
+
+    if (queue.length === 0) {
+      list.innerHTML = '<div style="text-align:center;color:var(--text3);padding:30px;font-size:13px;">File d\'attente vide</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+
+    queue.forEach((song, i) => {
+      if (!song) return;
+      const isCurrent = i === current;
+      const el = document.createElement('div');
+      el.className = 'queue-item' + (isCurrent ? ' current' : '');
+      el.innerHTML = `
+        <div class="queue-item-num">${isCurrent ? '▶' : i + 1}</div>
+        <div class="queue-item-thumb">
+          ${song.cover ? `<img src="${song.cover}">` : '🎵'}
+        </div>
+        <div class="queue-item-info">
+          <div class="queue-item-title">${escapeHTML(song.title || '—')}</div>
+          <div class="queue-item-artist">${escapeHTML(song.artist || '—')}</div>
+        </div>
+        <button class="queue-item-remove" data-index="${i}" title="Retirer">✕</button>
+      `;
+
+      // Clic → lire cette chanson
+      el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('queue-item-remove')) return;
+        if (typeof Player !== 'undefined') {
+          Player.playIndex(i);
+          closeQueuePanel();
+        }
+      });
+
+      // Retirer de la file
+      el.querySelector('.queue-item-remove')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof Player !== 'undefined' && Player.removeFromQueue) {
+          Player.removeFromQueue(i);
+          renderQueueList(); // rafraîchir
+        }
+      });
+
+      list.appendChild(el);
+    });
+
+    // Scroller jusqu'à la chanson actuelle
+    const currentEl = list.querySelector('.current');
+    if (currentEl) currentEl.scrollIntoView({ block: 'center' });
+
+  } catch (e) {
+    console.error('[App] Erreur renderQueueList:', e);
+  }
+}
+
+function escapeHTML(str) {
+  try {
+    return String(str || '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  } catch (e) { return str || ''; }
+}
+
+/* Mettre à jour la file après changement de chanson */
+function refreshQueuePanel() {
+  try {
+    const panel = document.getElementById('queue-panel');
+    if (panel && !panel.classList.contains('hidden')) {
+      renderQueueList();
+    }
+  } catch (e) {}
+}
+
+window.openQueuePanel    = openQueuePanel;
+window.closeQueuePanel   = closeQueuePanel;
+window.refreshQueuePanel = refreshQueuePanel;
+window.updateParolesActive = updateParolesActive;
+window.renderParolesView   = renderParolesView;
+window.setPlayerView       = setPlayerView;

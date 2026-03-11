@@ -110,6 +110,9 @@
 
     <!-- ARTISTES -->
     <div class="screen" id="screen-artistes">
+      <div class="search-bar-wrap">
+        <input class="search-input" id="search-artiste" placeholder="🔍 Rechercher un artiste..." type="search">
+      </div>
       <div id="artistes-list"></div>
     </div>
 
@@ -154,12 +157,18 @@
 
     <!-- STATS -->
     <div class="screen" id="screen-stats">
-      <div class="period-tabs" id="period-tabs">
-        <button class="period-tab active" data-period="jour">Jour</button>
-        <button class="period-tab" data-period="sem">Sem</button>
-        <button class="period-tab" data-period="mois">Mois</button>
-        <button class="period-tab" data-period="an">An</button>
-        <button class="period-tab" data-period="total">Total</button>
+      <div class="stats-topbar">
+        <div class="period-tabs" id="period-tabs">
+          <button class="period-tab active" data-period="jour">Jour</button>
+          <button class="period-tab" data-period="sem">Sem</button>
+          <button class="period-tab" data-period="mois">Mois</button>
+          <button class="period-tab" data-period="an">An</button>
+          <button class="period-tab" data-period="total">Total</button>
+        </div>
+        <div class="stats-actions">
+          <button class="stats-action-btn" id="stats-calendar-btn" title="Calendrier">📅</button>
+          <button class="stats-action-btn" id="stats-details-btn" title="Détails">◈</button>
+        </div>
       </div>
       <div id="stats-content"></div>
     </div>
@@ -213,48 +222,141 @@
   <div id="player-screen">
     <div id="player-bg"></div>
     <div id="player-art">🎵</div>
-    <div id="player-content">
-      <div id="player-header">
-        <button id="player-down">⌄</button>
-        <div id="player-title-wrap">
-          <div id="player-title">—</div>
-          <div id="player-artist">—</div>
+
+    <!-- CARROUSEL 3 VUES : Infos ← Lecteur → Paroles -->
+    <div id="player-carousel">
+
+      <!-- VUE 0 : INFOS -->
+      <div class="player-view" id="player-view-infos">
+        <div class="player-view-header">
+          <button id="player-down-infos">⌄</button>
+          <div class="player-view-label">INFOS</div>
+          <button id="player-menu-btn-infos">···</button>
         </div>
-        <button id="player-menu-btn">···</button>
+        <div id="player-infos-content">
+          <div class="info-row"><div class="info-label">TITRE</div><div class="info-val" id="info-title">—</div></div>
+          <div class="info-row"><div class="info-label">ARTISTE</div><div class="info-val" id="info-artist">—</div></div>
+          <div class="info-row"><div class="info-label">ALBUM</div><div class="info-val" id="info-album">—</div></div>
+          <div class="info-row"><div class="info-label">GENRE</div><div class="info-val" id="info-genre">—</div></div>
+          <div class="info-row"><div class="info-label">DURÉE</div><div class="info-val" id="info-duration">—</div></div>
+          <div class="info-row"><div class="info-label">ÉCOUTES</div><div class="info-val" id="info-plays">0</div></div>
+          <div class="info-row"><div class="info-label">AJOUTÉ</div><div class="info-val" id="info-added">—</div></div>
+          <div class="info-row"><div class="info-label">FICHIER</div><div class="info-val" id="info-file">—</div></div>
+        </div>
+        <div class="swipe-hint">Swipe → pour le lecteur</div>
       </div>
-      <div id="player-lyrics-preview">
-        <div id="player-lyrics-line1"></div>
-        <div id="player-lyrics-line2"></div>
-      </div>
-      <div id="player-dots">
-        <div class="dot"></div>
-        <div class="dot active"></div>
-        <div class="dot"></div>
-      </div>
-      <div id="player-actions">
-        <button class="action-btn" id="btn-like">♡</button>
-        <button class="action-btn" id="btn-queue">⊕</button>
-        <button class="action-btn" id="btn-options">···</button>
-      </div>
-      <div id="player-progress-wrap">
-        <div id="player-progress"><div id="player-bar"></div></div>
-        <div id="player-times">
-          <span id="player-time-current">0:00</span>
-          <span id="player-time-total">0:00</span>
+
+      <!-- VUE 1 : LECTEUR PRINCIPAL -->
+      <div class="player-view active" id="player-view-main">
+        <div id="player-header">
+          <button id="player-down">⌄</button>
+          <div id="player-title-wrap">
+            <div id="player-title">—</div>
+            <div id="player-artist">—</div>
+          </div>
+          <button id="player-menu-btn">···</button>
+        </div>
+        <div id="player-lyrics-preview">
+          <div id="player-lyrics-line1"></div>
+          <div id="player-lyrics-line2"></div>
+        </div>
+        <div id="player-dots">
+          <div class="dot active-dot" id="dot-infos"></div>
+          <div class="dot active" id="dot-main"></div>
+          <div class="dot active-dot" id="dot-paroles"></div>
+        </div>
+        <div id="player-actions">
+          <button class="action-btn" id="btn-like">♡</button>
+          <button class="action-btn" id="btn-queue">⊕</button>
+          <button class="action-btn" id="btn-options">···</button>
+        </div>
+        <div id="player-progress-wrap">
+          <div id="player-progress"><div id="player-bar"></div></div>
+          <div id="player-times">
+            <span id="player-time-current">0:00</span>
+            <span id="player-time-total">0:00</span>
+          </div>
+        </div>
+        <div id="player-skip-row">
+          <button class="skip-btn" id="btn-rewind"><span class="skip-icon">«</span>10s</button>
+          <div id="player-controls">
+            <button class="ctrl-btn" id="btn-shuffle">⇄</button>
+            <button class="ctrl-btn" id="btn-prev">⏮</button>
+            <button id="btn-play-main">▶</button>
+            <button class="ctrl-btn" id="btn-next">⏭</button>
+            <button class="ctrl-btn" id="btn-queue-panel">≋</button>
+          </div>
+          <button class="skip-btn" id="btn-forward">10s<span class="skip-icon">»</span></button>
         </div>
       </div>
-      <div id="player-skip-row">
-        <button class="skip-btn" id="btn-rewind"><span class="skip-icon">«</span>10s</button>
-        <div id="player-controls">
-          <button class="ctrl-btn" id="btn-shuffle">⇄</button>
-          <button class="ctrl-btn" id="btn-prev">⏮</button>
-          <button id="btn-play-main">⏸</button>
-          <button class="ctrl-btn" id="btn-next">⏭</button>
-          <button class="ctrl-btn" id="btn-queue-panel">≋</button>
+
+      <!-- VUE 2 : PAROLES -->
+      <div class="player-view" id="player-view-paroles">
+        <div class="player-view-header">
+          <button id="player-down-paroles">⌄</button>
+          <div class="player-view-label" id="paroles-song-title">PAROLES</div>
+          <div class="paroles-actions">
+            <button class="paroles-btn" id="btn-eq" title="Son">🎛</button>
+            <button class="paroles-btn" id="btn-sync" title="Sync">🎚</button>
+            <button class="paroles-btn" id="btn-translate" title="Traduire">🌐</button>
+          </div>
         </div>
-        <button class="skip-btn" id="btn-forward">10s<span class="skip-icon">»</span></button>
+        <div id="paroles-list"></div>
+        <div class="swipe-hint">Swipe ← pour le lecteur</div>
+
+        <!-- Panneau Son -->
+        <div id="panel-son" class="bottom-panel hidden">
+          <div class="panel-title">🎛 Son</div>
+          <div class="eq-presets">
+            <button class="eq-btn active" data-preset="normal">Normal</button>
+            <button class="eq-btn" data-preset="bass">Bass</button>
+            <button class="eq-btn" data-preset="rock">Rock</button>
+            <button class="eq-btn" data-preset="pop">Pop</button>
+            <button class="eq-btn" data-preset="electro">Électro</button>
+            <button class="eq-btn" data-preset="jazz">Jazz</button>
+            <button class="eq-btn" data-preset="classique">Classique</button>
+            <button class="eq-btn" data-preset="party">Party</button>
+            <button class="eq-btn" data-preset="night">Night</button>
+          </div>
+        </div>
+
+        <!-- Panneau Sync -->
+        <div id="panel-sync" class="bottom-panel hidden">
+          <div class="panel-title">🎚 Synchronisation</div>
+          <div class="sync-row">
+            <button class="sync-btn" id="sync-minus">← -0.5s</button>
+            <button class="sync-auto" id="sync-auto">✦ auto</button>
+            <button class="sync-btn" id="sync-plus">+0.5s →</button>
+          </div>
+          <div class="font-row">
+            <div class="font-label">Taille</div>
+            <button class="font-btn" data-size="sm">A-</button>
+            <button class="font-btn active" data-size="md">A</button>
+            <button class="font-btn" data-size="lg">A+</button>
+          </div>
+        </div>
       </div>
+
+    </div><!-- /player-carousel -->
+
+    <!-- BARRE VOLUME (droite) -->
+    <div id="volume-bar-wrap" class="hidden">
+      <div id="volume-bar-track">
+        <div id="volume-bar-fill"></div>
+      </div>
+      <div id="volume-pct">100%</div>
     </div>
+
+    <!-- PANNEAU FILE D'ATTENTE -->
+    <div id="queue-panel" class="hidden">
+      <div class="queue-header">
+        <div class="queue-title">≋ File d'attente</div>
+        <button id="queue-close">✕</button>
+      </div>
+      <div id="queue-list"></div>
+    </div>
+    <div id="queue-overlay" class="hidden"></div>
+
   </div>
 
   <!-- ═══════════════════ RÉGLAGES ═══════════════════ -->
@@ -274,10 +376,11 @@
       </div>
       <div class="settings-section">
         <div class="settings-label">Apparence</div>
-        <div class="settings-item">
-          <div class="settings-icon">🌙</div>
+        <div class="settings-item" id="settings-theme">
+          <div class="settings-icon" id="theme-icon">🌙</div>
           <div class="settings-text">Thème</div>
-          <div class="settings-value">Sombre</div>
+          <div class="settings-value" id="theme-value">Sombre</div>
+          <div class="settings-arrow">›</div>
         </div>
         <div class="accent-row">
           <div class="accent-label">Couleur accent</div>
@@ -293,10 +396,10 @@
       </div>
       <div class="settings-section">
         <div class="settings-label">Ensemble</div>
-        <div class="settings-item">
+        <div class="settings-item" id="settings-quality">
           <div class="settings-icon">📶</div>
           <div class="settings-text">Qualité stream</div>
-          <div class="settings-value">Auto</div>
+          <div class="settings-value" id="quality-value">Auto</div>
           <div class="settings-arrow">›</div>
         </div>
       </div>

@@ -283,9 +283,13 @@ const Library = {
       const title   = encodeURIComponent(song.title  || '');
       const artist  = encodeURIComponent(song.artist || '');
 
-      if (!title || artist === 'Inconnu') return;
+      if (!title || song.artist === 'Inconnu') return;
 
-      const url = `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${artist}&track=${title}&format=json`;
+      // Proxy CORS pour GitHub Pages (à supprimer pour Android)
+      const base = 'https://corsproxy.io/?';
+      const url  = base + encodeURIComponent(
+        `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${artist}&track=${title}&format=json`
+      );
 
       const res = await fetch(url);
       if (!res.ok) return;
@@ -295,16 +299,12 @@ const Library = {
 
       const track = data.track;
 
-      // Mettre à jour les infos
+      // Album + pochette
       if (track.album) {
         song.album = track.album.title || song.album;
-
-        // Pochette
         const images = track.album.image || [];
         const large  = images.find(img => img.size === 'extralarge' || img.size === 'large');
-        if (large && large['#text']) {
-          song.cover = large['#text'];
-        }
+        if (large && large['#text']) song.cover = large['#text'];
       }
 
       // Genre
@@ -312,15 +312,16 @@ const Library = {
         song.genre = track.toptags.tag[0].name || '';
       }
 
-      // Durée (en ms dans Last.fm)
+      // Durée
       if (track.duration && !song.duration) {
         song.duration = parseInt(track.duration) / 1000;
       }
 
-      // Sauvegarder et rafraîchir
+      this.buildIndex();
       this.saveToStorage();
       this.renderBiblio();
 
+      if (typeof showToast === 'function') showToast('✓ Métadonnées : ' + song.title);
       console.log('[Library] Métadonnées récupérées:', song.title);
 
     } catch (e) {
@@ -567,8 +568,8 @@ const Library = {
         const isPlaying = this.isCurrentSong(song);
         const el = this.createSongRow(song, idx + 1, isPlaying, [
           { icon:'▶',  label:'Lire',                action: () => this.playSong(song, songs, idx) },
-          { icon:'⏭',  label:'Lire ensuite',         action: () => showToast('Ajouté après la chanson en cours') },
-          { icon:'⊕',  label:'Ajouter à la file',    action: () => showToast('Ajouté à la file') },
+          { icon:'⏭',  label:'Lire ensuite',         action: () => Player.addNext(song) },
+          { icon:'⊕',  label:'Ajouter à la file',    action: () => Player.addToQueue(song) },
           { icon:'🎵', label:'Ajouter à playlist',   action: () => this.showAddToPlaylist(song) },
           { icon:'✎',  label:'Modifier les infos',   action: () => showToast('Modifier...') },
           { icon:'📊', label:'Stats du titre',        action: () => showToast('Stats...') },
@@ -595,6 +596,15 @@ const Library = {
           if (typeof closeSubscreen === 'function') closeSubscreen('screen-artiste-detail');
         });
       }
+
+      // Recherche artistes
+      const searchArtiste = document.getElementById('search-artiste');
+      if (searchArtiste) {
+        searchArtiste.addEventListener('input', () => {
+          this.artisteQuery = searchArtiste.value.trim().toLowerCase();
+          this.renderArtistes();
+        });
+      }
     } catch (e) {
       console.error('[Library] Erreur initArtistes:', e);
     }
@@ -605,7 +615,12 @@ const Library = {
       const list = document.getElementById('artistes-list');
       if (!list) return;
 
-      const artistKeys = Object.keys(this.artists).sort();
+      let artistKeys = Object.keys(this.artists).sort();
+
+      // Filtrer par recherche
+      if (this.artisteQuery) {
+        artistKeys = artistKeys.filter(k => k.toLowerCase().includes(this.artisteQuery));
+      }
 
       if (artistKeys.length === 0) {
         list.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px 0;font-size:13px;">👤 Aucun artiste</div>';
@@ -622,7 +637,7 @@ const Library = {
         const el = document.createElement('div');
         el.className = 'artist-row';
         el.innerHTML = `
-          <div class="artist-photo">${artist.info.photo ? `<img src="${artist.info.photo}" alt="">` : '👤'}</div>
+          <div class="artist-photo">${artist.info && artist.info.photo ? `<img src="${artist.info.photo}" alt="">` : '👤'}</div>
           <div class="artist-info">
             <div class="artist-name">${this.escape(artist.name)}</div>
             <div class="artist-meta">${artist.songs.length} titre${artist.songs.length > 1 ? 's' : ''} • ${albumCount} album${albumCount > 1 ? 's' : ''}</div>
@@ -648,42 +663,81 @@ const Library = {
 
       nomEl.textContent = artist.name || '—';
 
-      // Trier chansons par écoutes décroissantes
+      // Trier chansons par écoutes
       const songs = [...(artist.songs || [])].sort((a, b) => {
-        const pa = (this.stats[a.id] || {}).plays || 0;
-        const pb = (this.stats[b.id] || {}).plays || 0;
-        return pb - pa;
+        return ((this.stats[b.id]||{}).plays||0) - ((this.stats[a.id]||{}).plays||0);
       });
 
-      const totalPlays = songs.reduce((acc, s) => acc + ((this.stats[s.id] || {}).plays || 0), 0);
-      const albumCount = this.countAlbumsForArtist(artist.name);
+      const totalPlays = songs.reduce((acc, s) => acc + ((this.stats[s.id]||{}).plays||0), 0);
+
+      // Discographie par type
+      const albumMap = {};
+      songs.forEach(s => {
+        const key = (s.album || '').trim();
+        if (!key) return;
+        if (!albumMap[key]) albumMap[key] = { name: key, songs: [], cover: s.cover || null };
+        albumMap[key].songs.push(s);
+        if (!albumMap[key].cover && s.cover) albumMap[key].cover = s.cover;
+      });
+      const albums = Object.values(albumMap).sort((a,b) => a.name.localeCompare(b.name));
+
+      const photoHTML = (artist.info && artist.info.photo)
+        ? `<img src="${artist.info.photo}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+        : '<div style="font-size:60px;display:flex;align-items:center;justify-content:center;height:100%;">👤</div>';
 
       contentEl.innerHTML = `
         <div class="artiste-hero">
-          <div class="artiste-hero-bg">${artist.info.photo ? `<img src="${artist.info.photo}" alt="" style="width:100%;height:100%;object-fit:cover;">` : '👤'}</div>
+          <div class="artiste-hero-bg" id="artiste-hero-bg">${photoHTML}</div>
           <div class="artiste-hero-overlay"></div>
           <div class="artiste-hero-info">
             <div class="artiste-hero-name">${this.escape(artist.name)}</div>
-            <div class="artiste-hero-meta">${songs.length} titre${songs.length>1?'s':''} • ${albumCount} album${albumCount>1?'s':''}</div>
+            <div class="artiste-hero-meta">${songs.length} titre${songs.length>1?'s':''} • ${albums.length} album${albums.length>1?'s':''}</div>
           </div>
         </div>
         <div class="artiste-section">
-          ${artist.info.bio ? `
+          <div id="artiste-bio-wrap" ${artist.info && artist.info.bio ? '' : 'style="display:none"'}>
             <div class="section-title">À propos</div>
-            <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:4px;">${this.escape(artist.info.bio)}</div>
-          ` : ''}
-          <div class="section-title">🏆 Stats artiste</div>
-          <div class="card" style="display:flex;gap:20px;padding:12px 16px;">
+            <div class="artiste-bio" id="artiste-bio-text">${artist.info && artist.info.bio ? this.escape(artist.info.bio) : ''}</div>
+          </div>
+
+          <div class="card" style="display:flex;gap:20px;padding:12px 16px;margin-bottom:12px;">
             <div class="stat-item"><div class="stat-num">${totalPlays}</div><div class="stat-label">ÉCOUTES</div></div>
             <div class="stat-item"><div class="stat-num">${songs.length}</div><div class="stat-label">TITRES</div></div>
-            <div class="stat-item"><div class="stat-num">${albumCount}</div><div class="stat-label">ALBUMS</div></div>
+            <div class="stat-item"><div class="stat-num">${albums.length}</div><div class="stat-label">ALBUMS</div></div>
           </div>
-          <div class="section-title">🎵 Titres populaires</div>
+
+          ${albums.length > 0 ? `
+            <div class="section-title">💿 Discographie</div>
+            <div id="artiste-discographie"></div>
+          ` : ''}
+
+          <div class="section-title">🏆 Titres populaires</div>
           <div id="artiste-songs-list"></div>
         </div>
       `;
 
-      // Rendre les chansons
+      // Discographie
+      const discoEl = contentEl.querySelector('#artiste-discographie');
+      if (discoEl) {
+        albums.forEach(album => {
+          const albumEl = document.createElement('div');
+          albumEl.className = 'album-item';
+          albumEl.innerHTML = `
+            <div class="album-item-thumb">${album.cover ? `<img src="${album.cover}">` : '💿'}</div>
+            <div class="album-item-info">
+              <div class="album-item-name">${this.escape(album.name)}</div>
+              <div class="album-item-meta">${album.songs.length} titre${album.songs.length>1?'s':''}</div>
+            </div>
+            <div class="album-item-arrow">›</div>
+          `;
+          albumEl.addEventListener('click', () => {
+            this.playSong(album.songs[0], album.songs, 0);
+          });
+          discoEl.appendChild(albumEl);
+        });
+      }
+
+      // Chansons populaires
       const songsListEl = contentEl.querySelector('#artiste-songs-list');
       if (songsListEl) {
         const top = songs.slice(0, 5);
@@ -691,14 +745,12 @@ const Library = {
           const isPlaying = this.isCurrentSong(song);
           const el = this.createSongRow(song, idx + 1, isPlaying, [
             { icon:'▶',  label:'Lire',              action: () => this.playSong(song, songs, idx) },
-            { icon:'⏭',  label:'Lire ensuite',       action: () => showToast('Ajouté après la chanson en cours') },
-            { icon:'⊕',  label:'Ajouter à la file',  action: () => showToast('Ajouté à la file') },
-            { icon:'🎵', label:'Ajouter à playlist', action: () => this.showAddToPlaylist(song) },
+            { icon:'⊕',  label:'Ajouter à la file', action: () => Player.addToQueue(song) },
+            { icon:'🎵', label:'Ajouter à playlist',action: () => this.showAddToPlaylist(song) },
           ]);
           songsListEl.appendChild(el);
         });
 
-        // Bouton "Voir plus" si plus de 5
         if (songs.length > 5) {
           const btnMore = document.createElement('div');
           btnMore.style.cssText = 'text-align:center;padding:12px;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;';
@@ -706,8 +758,7 @@ const Library = {
           btnMore.addEventListener('click', () => {
             songsListEl.innerHTML = '';
             songs.forEach((song, idx) => {
-              const isPlaying = this.isCurrentSong(song);
-              const el = this.createSongRow(song, idx + 1, isPlaying, [
+              const el = this.createSongRow(song, idx+1, this.isCurrentSong(song), [
                 { icon:'▶', label:'Lire', action: () => this.playSong(song, songs, idx) },
               ]);
               songsListEl.appendChild(el);
@@ -720,8 +771,81 @@ const Library = {
 
       if (typeof openSubscreen === 'function') openSubscreen('screen-artiste-detail');
 
+      // Chercher photo + bio en arrière-plan si pas encore en cache
+      if (!artist.info || !artist.info.photo || !artist.info.bio) {
+        this.fetchArtistInfo(artist);
+      }
+
     } catch (e) {
       console.error('[Library] Erreur openArtisteDetail:', e);
+    }
+  },
+
+  /* Chercher photo + bio artiste via TheAudioDB et Wikipedia */
+  async fetchArtistInfo(artist) {
+    try {
+      if (!artist || !artist.name || !navigator.onLine) return;
+
+      const name = encodeURIComponent(artist.name);
+
+      // 1. TheAudioDB (photo)
+      try {
+        const proxy = 'https://corsproxy.io/?';
+        const url   = proxy + encodeURIComponent(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${name}`);
+        const res   = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          const a    = data && data.artists && data.artists[0];
+          if (a) {
+            if (!artist.info) artist.info = {};
+            if (a.strArtistThumb) artist.info.photo = a.strArtistThumb;
+            if (a.strBiographyFR || a.strBiographyEN) {
+              artist.info.bio = (a.strBiographyFR || a.strBiographyEN || '').slice(0, 400);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Library] TheAudioDB:', e.message);
+      }
+
+      // 2. Wikipedia (bio si pas encore trouvée)
+      if (!artist.info || !artist.info.bio) {
+        try {
+          const wikiUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${name}`;
+          const res = await fetch(wikiUrl);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.extract) {
+              if (!artist.info) artist.info = {};
+              artist.info.bio = data.extract.slice(0, 400);
+            }
+          }
+        } catch (e) {
+          console.warn('[Library] Wikipedia:', e.message);
+        }
+      }
+
+      // Mettre à jour l'affichage si le détail artiste est ouvert
+      if (artist.info) {
+        const bgEl  = document.getElementById('artiste-hero-bg');
+        const bioEl = document.getElementById('artiste-bio-text');
+        const bioWrap = document.getElementById('artiste-bio-wrap');
+
+        if (bgEl && artist.info.photo) {
+          bgEl.innerHTML = `<img src="${artist.info.photo}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
+        }
+        if (bioEl && artist.info.bio) {
+          bioEl.textContent = artist.info.bio;
+          bioWrap?.removeAttribute('style');
+        }
+
+        // Mettre à jour photo dans la liste
+        this.renderArtistes();
+        this.saveToStorage();
+      }
+
+    } catch (e) {
+      console.warn('[Library] Erreur fetchArtistInfo:', e.message);
     }
   },
 
@@ -862,7 +986,7 @@ const Library = {
             const isPlaying = this.isCurrentSong(song);
             const el = this.createSongRow(song, idx + 1, isPlaying, [
               { icon:'▶',  label:'Lire',                action: () => this.playPlaylist(pl.id, idx) },
-              { icon:'⏭',  label:'Lire ensuite',         action: () => showToast('Ajouté après la chanson en cours') },
+              { icon:'⏭',  label:'Lire ensuite',         action: () => Player.addNext(song) },
               { icon:'🎵', label:'Autre playlist',        action: () => this.showAddToPlaylist(song) },
               { icon:'👤', label:'Voir artiste',          action: () => showToast('Artiste...') },
               { separator: true },
@@ -1030,15 +1154,25 @@ const Library = {
       const momentCard = document.getElementById('moment-card');
       if (momentCard) {
         momentCard.addEventListener('click', () => {
-          if (typeof openPlayer === 'function') openPlayer();
+          const song = Library.momentSong;
+          if (song) {
+            this.playSong(song, [song], 0);
+          } else if (typeof openPlayer === 'function') {
+            openPlayer();
+          }
         });
       }
 
       // Tri oubliés
+      this.oubliesSort = 'oldest'; // 'oldest' | 'mostplayed'
       const oubliesSort = document.getElementById('oublies-sort');
       if (oubliesSort) {
         oubliesSort.addEventListener('click', () => {
-          if (typeof showToast === 'function') showToast('Tri des oubliés...');
+          this.oubliesSort = this.oubliesSort === 'oldest' ? 'mostplayed' : 'oldest';
+          oubliesSort.textContent = this.oubliesSort === 'oldest' ? '⇅' : '♻';
+          this.renderOublies();
+          const label = this.oubliesSort === 'oldest' ? 'Plus anciens d\'abord' : 'Plus écoutés d\'abord';
+          if (typeof showToast === 'function') showToast(label);
         });
       }
 
@@ -1138,7 +1272,7 @@ const Library = {
         const plays = (this.stats[song.id] || {}).weekPlays || 0;
         const el = this.createSongRow(song, idx + 1, isPlaying, [
           { icon:'▶', label:'Lire', action: () => this.playSong(song, coeurs, idx) },
-          { icon:'⊕', label:'Ajouter à la file', action: () => showToast('Ajouté à la file') },
+          { icon:'⊕', label:'Ajouter à la file', action: () => Player.addToQueue(song) },
         ]);
         // Ajouter info écoutes semaine
         const metaEl = el.querySelector('.song-meta');
@@ -1196,11 +1330,25 @@ const Library = {
       if (!list) return;
 
       const thirtyDaysAgo = Date.now() - (30 * 24 * 3600 * 1000);
-      const oublies = this.songs.filter(s => {
+
+      let oublies = this.songs.filter(s => {
         const lastPlayed = (this.stats[s.id] || {}).lastPlayed || 0;
         return lastPlayed > 0 && lastPlayed < thirtyDaysAgo;
-      }).sort((a,b) => (this.stats[a.id]?.lastPlayed||0) - (this.stats[b.id]?.lastPlayed||0)).slice(0, 5);
+      });
 
+      // Tri selon le mode actif
+      if (this.oubliesSort === 'mostplayed') {
+        oublies = oublies.sort((a, b) =>
+          ((this.stats[b.id] || {}).plays || 0) - ((this.stats[a.id] || {}).plays || 0)
+        );
+      } else {
+        // oldest : plus ancienne écoute en premier
+        oublies = oublies.sort((a, b) =>
+          ((this.stats[a.id] || {}).lastPlayed || 0) - ((this.stats[b.id] || {}).lastPlayed || 0)
+        );
+      }
+
+      oublies = oublies.slice(0, 10);
       list.innerHTML = '';
 
       if (oublies.length === 0) {
@@ -1210,13 +1358,19 @@ const Library = {
 
       oublies.forEach((song, idx) => {
         const lastPlayed = (this.stats[song.id] || {}).lastPlayed || 0;
-        const daysAgo    = Math.floor((Date.now() - lastPlayed) / (24*3600*1000));
+        const daysAgo    = Math.floor((Date.now() - lastPlayed) / (24 * 3600 * 1000));
+        const plays      = (this.stats[song.id] || {}).plays || 0;
         const isPlaying  = this.isCurrentSong(song);
         const el = this.createSongRow(song, idx + 1, isPlaying, [
-          { icon:'▶', label:'Lire', action: () => this.playSong(song, oublies, idx) },
+          { icon:'▶', label:'Lire',              action: () => this.playSong(song, oublies, idx) },
+          { icon:'⊕', label:'Ajouter à la file', action: () => Player.addToQueue(song) },
         ]);
         const metaEl = el.querySelector('.song-meta');
-        if (metaEl) metaEl.textContent = (song.artist||'') + ' • il y a ' + daysAgo + ' jours';
+        if (metaEl) {
+          metaEl.textContent = (song.artist || '') +
+            ' • il y a ' + daysAgo + ' j' +
+            (plays ? ' • ' + plays + ' écoute' + (plays > 1 ? 's' : '') : '');
+        }
         list.appendChild(el);
       });
 
@@ -1250,6 +1404,7 @@ const Library = {
       }
 
       card.classList.remove('hidden');
+      Library.momentSong = best;
 
       const thumbEl  = document.getElementById('moment-thumb');
       const titleEl  = document.getElementById('moment-title');

@@ -203,10 +203,13 @@ const Lyrics = {
   setLines(lines, synced) {
     try {
       this.lines = lines || [];
+      // Aperçu dans le lecteur
       this.updatePreview(
         this.lines[0]?.text || '',
         this.lines[1]?.text || ''
       );
+      // Rafraîchir la vue paroles si ouverte
+      if (typeof renderParolesView === 'function') renderParolesView();
     } catch (e) {
       console.error('[Lyrics] Erreur setLines:', e);
     }
@@ -255,8 +258,13 @@ const Lyrics = {
           : next.text)
         : '';
 
-      // Aperçu dans le lecteur
+      // Aperçu dans le lecteur principal
       this.updatePreview(display, displayNext);
+
+      // Ligne active dans la vue paroles
+      if (typeof updateParolesActive === 'function') {
+        updateParolesActive(this.currentLine);
+      }
 
     } catch (e) {
       console.error('[Lyrics] Erreur renderCurrentLine:', e);
@@ -377,11 +385,22 @@ const Lyrics = {
   setFontSize(size) {
     try {
       this.fontSize = size;
-      const sizes = { sm:'13px', md:'16px', lg:'20px' };
-      const el1   = document.getElementById('player-lyrics-line1');
-      const el2   = document.getElementById('player-lyrics-line2');
-      if (el1) el1.style.fontSize = sizes[size] || '16px';
-      if (el2) el2.style.fontSize = sizes[size] ? (parseInt(sizes[size])-2)+'px' : '14px';
+      const sizes = { sm:'13px', md:'16px', lg:'22px' };
+      const px    = sizes[size] || '16px';
+      // Aperçu lecteur
+      const el1 = document.getElementById('player-lyrics-line1');
+      const el2 = document.getElementById('player-lyrics-line2');
+      if (el1) el1.style.fontSize = px;
+      if (el2) el2.style.fontSize = (parseInt(px) - 2) + 'px';
+      // Vue paroles complète
+      const list = document.getElementById('paroles-list');
+      if (list) {
+        list.querySelectorAll('.paroles-line').forEach(el => {
+          el.style.fontSize = '';  // reset CSS gère l'actif/inactif
+        });
+        list.style.setProperty('--paroles-font', px);
+      }
+      if (typeof showToast === 'function') showToast('Taille : ' + size.toUpperCase());
     } catch (e) {}
   },
 

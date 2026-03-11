@@ -7,18 +7,36 @@ const Stats = {
 
   /* ─── ÉTAT ─── */
   currentPeriod: 'jour',
-  topLimit:      10,    // nombre d'entrées affichées par défaut
-  topMax:        200,   // maximum affichable
+  topLimit:      10,
+  topMax:        200,
+  calYear:       new Date().getFullYear(),
+  calMonth:      new Date().getMonth(),
 
   /* ─── INIT ─── */
   init() {
     try {
       this.initPeriodTabs();
+      this.initCalendarBtn();
+      this.initDetailsBtn();
       this.render('jour');
       console.log('[Stats] Initialisé');
     } catch (e) {
       console.error('[Stats] Erreur init:', e);
     }
+  },
+
+  initCalendarBtn() {
+    try {
+      const btn = document.getElementById('stats-calendar-btn');
+      if (btn) btn.addEventListener('click', () => this.openCalendar());
+    } catch(e) {}
+  },
+
+  initDetailsBtn() {
+    try {
+      const btn = document.getElementById('stats-details-btn');
+      if (btn) btn.addEventListener('click', () => this.openDetails());
+    } catch(e) {}
   },
 
   /* ═══════════════════════════════════════════════════════
@@ -469,6 +487,442 @@ const Stats = {
     } catch (e) {
       return '0min';
     }
+  },
+
+  /* ═══════════════════════════════════════════════════════
+     CALENDRIER
+     ═══════════════════════════════════════════════════════ */
+
+  openCalendar() {
+    try {
+      // Créer l'overlay s'il n'existe pas encore
+      let overlay = document.getElementById('stats-calendar-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'stats-calendar-overlay';
+        overlay.className = 'stats-overlay';
+        document.body.appendChild(overlay);
+      }
+
+      overlay.innerHTML = '';
+      overlay.classList.add('open');
+
+      const panel = document.createElement('div');
+      panel.className = 'stats-panel';
+
+      panel.innerHTML = `
+        <div class="stats-panel-header">
+          <button class="stats-panel-back" id="cal-close">‹</button>
+          <div class="stats-panel-title">📅 Historique</div>
+          <div></div>
+        </div>
+        <div class="cal-nav">
+          <button class="cal-nav-btn" id="cal-prev">‹</button>
+          <div class="cal-month-label" id="cal-month-label"></div>
+          <button class="cal-nav-btn" id="cal-next">›</button>
+        </div>
+        <div class="cal-grid-header">
+          <div>L</div><div>M</div><div>M</div>
+          <div>J</div><div>V</div><div>S</div><div>D</div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend">
+          <div class="cal-legend-item"><div class="cal-day-dot" style="background:var(--bg3)"></div> Aucune</div>
+          <div class="cal-legend-item"><div class="cal-day-dot" style="background:var(--accent);opacity:0.3"></div> 1–5</div>
+          <div class="cal-legend-item"><div class="cal-day-dot" style="background:var(--accent);opacity:0.6"></div> 6–15</div>
+          <div class="cal-legend-item"><div class="cal-day-dot" style="background:var(--accent)"></div> 16+</div>
+        </div>
+        <div class="cal-day-detail hidden" id="cal-day-detail"></div>
+      `;
+
+      overlay.appendChild(panel);
+
+      document.getElementById('cal-close')?.addEventListener('click', () => {
+        overlay.classList.remove('open');
+      });
+
+      document.getElementById('cal-prev')?.addEventListener('click', () => {
+        this.calMonth--;
+        if (this.calMonth < 0) { this.calMonth = 11; this.calYear--; }
+        this.renderCalendar();
+      });
+
+      document.getElementById('cal-next')?.addEventListener('click', () => {
+        const now = new Date();
+        if (this.calYear > now.getFullYear() ||
+           (this.calYear === now.getFullYear() && this.calMonth >= now.getMonth())) return;
+        this.calMonth++;
+        if (this.calMonth > 11) { this.calMonth = 0; this.calYear++; }
+        this.renderCalendar();
+      });
+
+      this.renderCalendar();
+
+    } catch(e) {
+      console.error('[Stats] Erreur openCalendar:', e);
+    }
+  },
+
+  renderCalendar() {
+    try {
+      const months = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+      const label  = document.getElementById('cal-month-label');
+      const grid   = document.getElementById('cal-grid');
+      if (!label || !grid) return;
+
+      label.textContent = months[this.calMonth] + ' ' + this.calYear;
+
+      // Calculer écoutes par jour du mois
+      const dayPlays = {};
+      const dayHistory = {}; // pour le détail au clic
+
+      if (Library && Library.songs) {
+        Library.songs.forEach(song => {
+          const st = Library.stats[song.id] || {};
+          (st.history || []).forEach(entry => {
+            if (!entry || !entry.ts) return;
+            const d = new Date(entry.ts);
+            if (d.getFullYear() !== this.calYear || d.getMonth() !== this.calMonth) return;
+            const day = d.getDate();
+            dayPlays[day]   = (dayPlays[day] || 0) + 1;
+            if (!dayHistory[day]) dayHistory[day] = [];
+            dayHistory[day].push({ song, ts: entry.ts });
+          });
+        });
+      }
+
+      // Nb de jours et premier jour
+      const daysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
+      let firstDay      = new Date(this.calYear, this.calMonth, 1).getDay();
+      firstDay          = firstDay === 0 ? 6 : firstDay - 1; // lundi = 0
+
+      grid.innerHTML = '';
+
+      // Cellules vides avant le 1er
+      for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'cal-day empty';
+        grid.appendChild(empty);
+      }
+
+      const today = new Date();
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const count  = dayPlays[d] || 0;
+        const isToday = (d === today.getDate() &&
+          this.calMonth === today.getMonth() &&
+          this.calYear  === today.getFullYear());
+
+        const cell = document.createElement('div');
+        cell.className = 'cal-day' + (isToday ? ' today' : '') + (count > 0 ? ' has-plays' : '');
+        cell.dataset.day = d;
+
+        // Intensité de couleur
+        let opacity = 0;
+        if      (count >= 16) opacity = 1;
+        else if (count >= 6)  opacity = 0.6;
+        else if (count >= 1)  opacity = 0.3;
+
+        cell.innerHTML = `
+          <div class="cal-day-num">${d}</div>
+          ${opacity > 0 ? `<div class="cal-day-bar" style="opacity:${opacity}"></div>` : ''}
+          ${count > 0 ? `<div class="cal-day-count">${count}</div>` : ''}
+        `;
+
+        if (count > 0) {
+          cell.addEventListener('click', () => this.showDayDetail(d, dayHistory[d] || []));
+        }
+
+        grid.appendChild(cell);
+      }
+
+    } catch(e) {
+      console.error('[Stats] Erreur renderCalendar:', e);
+    }
+  },
+
+  showDayDetail(day, history) {
+    try {
+      const detailEl = document.getElementById('cal-day-detail');
+      if (!detailEl) return;
+
+      const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+      detailEl.classList.remove('hidden');
+
+      // Trier par heure
+      const sorted = [...history].sort((a,b) => a.ts - b.ts);
+
+      // Top 5 du jour
+      const counts = {};
+      sorted.forEach(({song}) => {
+        counts[song.id] = counts[song.id] || { song, plays: 0 };
+        counts[song.id].plays++;
+      });
+      const top = Object.values(counts).sort((a,b) => b.plays - a.plays).slice(0, 5);
+
+      detailEl.innerHTML = `
+        <div class="cal-detail-title">${day} ${months[this.calMonth]} — ${history.length} écoute${history.length>1?'s':''}</div>
+        ${top.map(({ song, plays }) => `
+          <div class="cal-detail-row">
+            <div class="cal-detail-thumb">${song.cover ? `<img src="${song.cover}">` : '🎵'}</div>
+            <div class="cal-detail-info">
+              <div class="cal-detail-name">${this.escape(song.title||'—')}</div>
+              <div class="cal-detail-sub">${this.escape(song.artist||'—')}</div>
+            </div>
+            <div class="cal-detail-plays">${plays}×</div>
+          </div>
+        `).join('')}
+      `;
+    } catch(e) {}
+  },
+
+  /* ═══════════════════════════════════════════════════════
+     FENÊTRE DÉTAILS ◈
+     ═══════════════════════════════════════════════════════ */
+
+  openDetails() {
+    try {
+      let overlay = document.getElementById('stats-details-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'stats-details-overlay';
+        overlay.className = 'stats-overlay';
+        document.body.appendChild(overlay);
+      }
+
+      overlay.innerHTML = '';
+      overlay.classList.add('open');
+
+      const data = this.computeDetails();
+
+      const panel = document.createElement('div');
+      panel.className = 'stats-panel';
+
+      panel.innerHTML = `
+        <div class="stats-panel-header">
+          <button class="stats-panel-back" id="details-close">‹</button>
+          <div class="stats-panel-title">◈ Détails</div>
+          <div></div>
+        </div>
+        <div class="details-scroll">
+
+          <div class="details-section">
+            <div class="details-section-title">🏃 Marathons d'écoute</div>
+            ${data.marathons.length === 0
+              ? '<div class="details-empty">Aucun marathon détecté</div>'
+              : data.marathons.map(m => `
+                <div class="details-row">
+                  <div class="details-row-label">${m.date}</div>
+                  <div class="details-row-value">${m.duration} • ${m.count} titres</div>
+                </div>
+              `).join('')}
+          </div>
+
+          <div class="details-section">
+            <div class="details-section-title">🕐 Heures de pointe</div>
+            <div class="peak-chart" id="peak-chart"></div>
+          </div>
+
+          <div class="details-section">
+            <div class="details-section-title">💛 Fidélité artiste</div>
+            ${data.loyalty.length === 0
+              ? '<div class="details-empty">Pas encore de données</div>'
+              : data.loyalty.map(a => `
+                <div class="details-row">
+                  <div class="details-row-label">${this.escape(a.artist)}</div>
+                  <div class="details-row-value">${a.days} jours d'écoute</div>
+                </div>
+              `).join('')}
+          </div>
+
+          <div class="details-section">
+            <div class="details-section-title">⏭ Titres souvent skippés</div>
+            ${data.skipped.length === 0
+              ? '<div class="details-empty">Aucun skip enregistré</div>'
+              : data.skipped.map(s => `
+                <div class="details-row">
+                  <div class="details-row-label">${this.escape(s.title)}</div>
+                  <div class="details-row-value" style="color:#f87171">${s.skips}× skippé</div>
+                </div>
+              `).join('')}
+          </div>
+
+          <div class="details-section">
+            <div class="details-section-title">🌍 Langues détectées</div>
+            ${data.langs.length === 0
+              ? '<div class="details-empty">Pas encore de données</div>'
+              : data.langs.map(l => `
+                <div class="details-row">
+                  <div class="details-row-label">${l.flag} ${l.lang}</div>
+                  <div class="details-row-value">${l.count} titre${l.count>1?'s':''}</div>
+                </div>
+              `).join('')}
+          </div>
+
+        </div>
+      `;
+
+      overlay.appendChild(panel);
+
+      document.getElementById('details-close')?.addEventListener('click', () => {
+        overlay.classList.remove('open');
+      });
+
+      // Rendre le graphique heures de pointe
+      this.renderPeakChart(data.peakHours);
+
+    } catch(e) {
+      console.error('[Stats] Erreur openDetails:', e);
+    }
+  },
+
+  computeDetails() {
+    try {
+      const marathons = [];
+      const peakHours = new Array(24).fill(0);
+      const artistDays = {};
+      const skipped   = {};
+      const langCount  = {};
+
+      if (!Library || !Library.songs) return { marathons:[], peakHours, loyalty:[], skipped:[], langs:[] };
+
+      // Regrouper toutes les écoutes par jour
+      const dayEntries = {};
+
+      Library.songs.forEach(song => {
+        const st = Library.stats[song.id] || {};
+
+        // Heures de pointe
+        (st.history || []).forEach(entry => {
+          if (!entry || !entry.ts) return;
+          const h = new Date(entry.ts).getHours();
+          peakHours[h]++;
+
+          // Par jour pour marathons
+          const dayKey = new Date(entry.ts).toDateString();
+          if (!dayEntries[dayKey]) dayEntries[dayKey] = [];
+          dayEntries[dayKey].push({ ts: entry.ts, song });
+
+          // Fidélité artiste
+          const ak = (song.artist || '').toLowerCase();
+          if (ak) {
+            if (!artistDays[ak]) artistDays[ak] = { artist: song.artist, days: new Set() };
+            artistDays[ak].days.add(dayKey);
+          }
+        });
+
+        // Skips
+        const skipCount = st.skips || 0;
+        if (skipCount > 0) {
+          skipped[song.id] = { title: song.title || '—', skips: skipCount };
+        }
+
+        // Langues (basé sur le champ genre ou lang stocké)
+        const lang = st.lang || song.lang || null;
+        if (lang) langCount[lang] = (langCount[lang] || 0) + 1;
+      });
+
+      // Marathons : jours avec plus de 10 écoutes en continu (séquences de 30min+)
+      Object.entries(dayEntries).forEach(([dayStr, entries]) => {
+        if (entries.length < 10) return;
+        const sorted = entries.sort((a,b) => a.ts - b.ts);
+
+        let start     = sorted[0].ts;
+        let end       = sorted[0].ts;
+        let count     = 1;
+        let maxCount  = 1;
+        let maxStart  = start;
+        let maxEnd    = end;
+
+        for (let i = 1; i < sorted.length; i++) {
+          const gap = sorted[i].ts - sorted[i-1].ts;
+          if (gap < 10 * 60 * 1000) { // gap < 10min = session continue
+            end = sorted[i].ts;
+            count++;
+            if (count > maxCount) {
+              maxCount = count;
+              maxStart = start;
+              maxEnd   = end;
+            }
+          } else {
+            start = sorted[i].ts;
+            end   = sorted[i].ts;
+            count = 1;
+          }
+        }
+
+        if (maxCount >= 10) {
+          const durSec = Math.round((maxEnd - maxStart) / 1000);
+          const d      = new Date(maxStart);
+          const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+          marathons.push({
+            date:     d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear(),
+            duration: this.formatDuration(durSec),
+            count:    maxCount,
+          });
+        }
+      });
+
+      marathons.sort((a,b) => b.count - a.count);
+
+      // Fidélité — top artistes par nb de jours distincts
+      const loyalty = Object.values(artistDays)
+        .map(a => ({ artist: a.artist, days: a.days.size }))
+        .sort((a,b) => b.days - a.days)
+        .slice(0, 5);
+
+      // Skippés — top 5
+      const skippedList = Object.values(skipped)
+        .sort((a,b) => b.skips - a.skips)
+        .slice(0, 5);
+
+      // Langues
+      const langFlags = {
+        fr:'🇫🇷', en:'🇬🇧', es:'🇪🇸', de:'🇩🇪', pt:'🇧🇷',
+        ar:'🇩🇿', ja:'🇯🇵', ko:'🇰🇷', zh:'🇨🇳', it:'🇮🇹',
+      };
+      const langNames = {
+        fr:'Français', en:'Anglais', es:'Espagnol', de:'Allemand', pt:'Portugais',
+        ar:'Arabe', ja:'Japonais', ko:'Coréen', zh:'Chinois', it:'Italien',
+      };
+      const langs = Object.entries(langCount)
+        .map(([code, count]) => ({
+          lang:  langNames[code] || code,
+          flag:  langFlags[code] || '🌍',
+          count,
+        }))
+        .sort((a,b) => b.count - a.count);
+
+      return { marathons: marathons.slice(0,5), peakHours, loyalty, skipped: skippedList, langs };
+
+    } catch(e) {
+      console.error('[Stats] Erreur computeDetails:', e);
+      return { marathons:[], peakHours: new Array(24).fill(0), loyalty:[], skipped:[], langs:[] };
+    }
+  },
+
+  renderPeakChart(peakHours) {
+    try {
+      const container = document.getElementById('peak-chart');
+      if (!container) return;
+
+      const max = Math.max(...peakHours, 1);
+
+      container.innerHTML = peakHours.map((count, h) => {
+        const pct    = Math.round((count / max) * 100);
+        const active = count > 0;
+        const label  = h % 6 === 0 ? h + 'h' : '';
+        return `
+          <div class="peak-col">
+            <div class="peak-bar-wrap">
+              <div class="peak-bar" style="height:${pct}%;${active ? 'background:var(--accent)' : ''}"></div>
+            </div>
+            <div class="peak-label">${label}</div>
+          </div>
+        `;
+      }).join('');
+
+    } catch(e) {}
   },
 
   escape(str) {

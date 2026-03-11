@@ -433,10 +433,57 @@ const Player = {
 
   initVolumeBar() {
     try {
-      // Intercepter les touches volume Android via AndroidBridge
-      // La barre est affichée côté Android (MusicService)
-      // Ici on gère juste le boost software
-    } catch (e) {}
+      let volumeHideTimer = null;
+
+      const showVolumeBar = (pct) => {
+        const wrap    = document.getElementById('volume-bar-wrap');
+        const fill    = document.getElementById('volume-bar-fill');
+        const pctEl   = document.getElementById('volume-pct');
+        if (!wrap) return;
+
+        // Afficher
+        wrap.classList.remove('hidden');
+        wrap.style.opacity = '1';
+
+        // Hauteur et couleur selon le niveau
+        const height = Math.min(100, (pct / 4) * 100); // 400% = 100% hauteur
+        if (fill) {
+          fill.style.height = height + '%';
+          if      (pct <= 1.0) fill.style.background = 'white';
+          else if (pct <= 2.0) fill.style.background = '#fbbf24'; // or
+          else if (pct <= 3.0) fill.style.background = '#f97316'; // orange
+          else                 fill.style.background = '#ef4444'; // rouge
+        }
+
+        // Afficher le pourcentage
+        if (pctEl) pctEl.textContent = Math.round(pct * 100) + '%';
+
+        // Masquer après 2.5s
+        clearTimeout(volumeHideTimer);
+        volumeHideTimer = setTimeout(() => {
+          if (wrap) {
+            wrap.style.opacity = '0';
+            setTimeout(() => wrap.classList.add('hidden'), 300);
+          }
+        }, 2500);
+      };
+
+      // Écouter les changements de volume de l'audio natif
+      if (this.audio) {
+        this.audio.addEventListener('volumechange', () => {
+          showVolumeBar(this.volumeBoost);
+        });
+      }
+
+      // Exposer pour Android
+      window.onVolumeChange = (pct) => {
+        this.volumeBoost = pct;
+        showVolumeBar(pct);
+      };
+
+    } catch (e) {
+      console.warn('[Player] initVolumeBar:', e);
+    }
   },
 
   setVolumeBoost(multiplier) {
@@ -681,6 +728,71 @@ const Player = {
 
     } catch (e) {
       console.error('[Player] Erreur updatePlayUI:', e);
+    }
+  },
+
+  /* Propriété alias currentIndex */
+  get currentIndex() { return this.queueIndex || 0; },
+
+  /* Ajouter une chanson à la fin de la file */
+  addToQueue(song) {
+    try {
+      if (!song) return;
+      // Si aucune file active, créer une file avec juste cette chanson
+      if (!this.queue || this.queue.length === 0) {
+        this.queue = [song];
+        this.queueIndex = 0;
+      } else {
+        this.queue.push(song);
+      }
+      if (typeof showToast === 'function') showToast('⊕ Ajouté à la file');
+      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
+    } catch (e) {
+      console.error('[Player] Erreur addToQueue:', e);
+    }
+  },
+
+  /* Insérer une chanson juste après la chanson actuelle */
+  addNext(song) {
+    try {
+      if (!song) return;
+      if (!this.queue || this.queue.length === 0) {
+        this.queue = [song];
+        this.queueIndex = 0;
+      } else {
+        // Insérer à queueIndex + 1
+        this.queue.splice(this.queueIndex + 1, 0, song);
+      }
+      if (typeof showToast === 'function') showToast('⏭ Lire ensuite');
+      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
+    } catch (e) {
+      console.error('[Player] Erreur addNext:', e);
+    }
+  },
+
+  /* Jouer par index dans la file */
+  playIndex(index) {
+    try {
+      if (!this.queue || index < 0 || index >= this.queue.length) return;
+      this.play(this.queue[index], this.queue, index);
+    } catch (e) {
+      console.error('[Player] Erreur playIndex:', e);
+    }
+  },
+
+  /* Retirer de la file */
+  removeFromQueue(index) {
+    try {
+      if (!this.queue || index < 0 || index >= this.queue.length) return;
+      if (index === this.queueIndex) {
+        if (typeof showToast === 'function') showToast('Impossible de retirer la chanson en cours');
+        return;
+      }
+      this.queue.splice(index, 1);
+      if (index < this.queueIndex) this.queueIndex--;
+      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
+    } catch (e) {
+      console.error('[Player] Erreur removeFromQueue:', e);
     }
   },
 
