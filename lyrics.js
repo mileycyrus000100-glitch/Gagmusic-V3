@@ -646,14 +646,44 @@ const Lyrics = {
 
   cleanTitle(title) {
     try {
-      return title
-        .replace(/\(.*?\)/g, '')
-        .replace(/\[.*?\]/g, '')
-        .replace(/feat\.?.*/i, '')
-        .replace(/official.*/i, '')
-        .replace(/HD|HQ|MV|4K/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const NOISE = [
+        'official audio', 'official video', 'official music video', 'official mv',
+        'official lyric video', 'official visualizer', 'official clip',
+        'music video', 'lyric video', 'lyrics video',
+        'visualizer', 'visualiser',
+        'clean version', 'clean edit', 'clean radio edit', 'radio edit',
+        'explicit version', 'extended version', 'extended mix',
+        'remastered', 'remaster',
+        'lyrics', 'paroles', 'audio', 'video', 'clip',
+        'hd', 'hq', '4k', '1080p', '720p',
+      ];
+
+      let t = title;
+
+      // Retirer contenu entre parenthèses/crochets si c'est du bruit
+      t = t.replace(/[\(\[][^\)\]]*[\)\]]/gi, s => {
+        const inner = s.slice(1,-1).trim().toLowerCase();
+        if (NOISE.some(n => inner.includes(n))) return '';
+        if (/^\d+\s*k(bps|hz)?$/.test(inner)) return '';
+        if (/^(flac|mp3|aac|ogg|wav)$/.test(inner)) return '';
+        if (/^(ft\.?|feat\.?|featuring)/i.test(inner)) return s;
+        return s;
+      });
+
+      // Retirer mots parasites hors parenthèses
+      const noiseReg = new RegExp(
+        '\\b(' + NOISE.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'gi'
+      );
+      t = t.replace(noiseReg, '');
+
+      // Retirer qualité audio : 256k 320kbps etc.
+      t = t.replace(/\b\d+\s*k(bps|hz)?\b/gi, '');
+      t = t.replace(/\b(flac|mp3|aac|ogg|wav)\b/gi, '');
+
+      // Retirer feat
+      t = t.replace(/feat\.?.*/i, '');
+
+      return t.replace(/\s+/g, ' ').replace(/[\s,\-–—]+$/, '').trim();
     } catch (e) {
       return title || '';
     }
