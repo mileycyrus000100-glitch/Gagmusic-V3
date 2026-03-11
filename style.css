@@ -2868,3 +2868,87 @@ input {
   white-space: nowrap;
 }
 
+
+/* ═══════════════════════════════════════════════════════
+   PANNEAU PROGRESSION COVERS
+   ═══════════════════════════════════════════════════════ */
+
+#cover-progress-panel {
+  position: fixed;
+  bottom: 80px;
+  left: 16px;
+  right: 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  z-index: 88;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+#cover-progress-panel.hidden { display: none; }
+
+.cover-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cover-progress-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+#cover-progress-stop {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.cover-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.cover-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+
+.cover-progress-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cover-progress-name {
+  font-size: 12px;
+  color: var(--text3);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-progress-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+

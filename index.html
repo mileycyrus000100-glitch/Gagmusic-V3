@@ -375,6 +375,14 @@
         </div>
       </div>
       <div class="settings-section">
+        <div class="settings-label">Bibliothèque</div>
+        <div class="settings-item" id="settings-refresh-covers">
+          <div class="settings-icon">🖼</div>
+          <div class="settings-text">Récupérer les métadonnées manquantes</div>
+          <div class="settings-arrow">›</div>
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="settings-label">Apparence</div>
         <div class="settings-item" id="settings-theme">
           <div class="settings-icon" id="theme-icon">🌙</div>
@@ -490,6 +498,21 @@
 
   <!-- ═══════════════════ TOAST ═══════════════════ -->
   <div id="toast"></div>
+
+  <!-- ═══════════════════ PROGRESSION COVERS ═══════════════════ -->
+  <div id="cover-progress-panel" class="hidden">
+    <div class="cover-progress-header">
+      <div class="cover-progress-title">🖼 Récupération des métadonnées</div>
+      <button id="cover-progress-stop" onclick="Library.hideCoverProgress()">✕</button>
+    </div>
+    <div class="cover-progress-track">
+      <div class="cover-progress-fill" id="cover-progress-fill"></div>
+    </div>
+    <div class="cover-progress-bottom">
+      <div class="cover-progress-name" id="cover-progress-name">⟳ Démarrage...</div>
+      <div class="cover-progress-count" id="cover-progress-count">0 / 0</div>
+    </div>
+  </div>
 
 </div><!-- /app -->
 

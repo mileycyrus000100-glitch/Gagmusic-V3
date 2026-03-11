@@ -68,22 +68,23 @@ const Lyrics = {
     try {
       if (!song) return;
 
-      // Nettoyage du titre pour la recherche
       const title  = this.cleanTitle(song.title  || '');
       const artist = this.cleanArtist(song.artist || '');
 
-      // Cascade : LRCLib → Lyrics.ovh → pas de paroles
+      // Cascade : LRCLib → Lyrics.ovh → Musixmatch → Genius
       let found = false;
 
-      // 1. LRCLib (paroles synchronisées LRC)
-      if (!found) {
-        found = await this.fetchLRCLib(title, artist, song.duration);
-      }
+      // 1. LRCLib (sync LRC — meilleure source)
+      if (!found) found = await this.fetchLRCLib(title, artist, song.duration);
 
-      // 2. Lyrics.ovh (paroles non sync)
-      if (!found) {
-        found = await this.fetchLyricsOvh(title, artist);
-      }
+      // 2. Lyrics.ovh
+      if (!found) found = await this.fetchLyricsOvh(title, artist);
+
+      // 3. Musixmatch (via proxy public non officiel)
+      if (!found) found = await this.fetchMusixmatch(title, artist);
+
+      // 4. Genius (scraping titre via API search)
+      if (!found) found = await this.fetchGenius(title, artist);
 
       if (!found) {
         this.updatePreview('Paroles introuvables', 'Essaie de corriger le titre ou l\'artiste');
@@ -154,6 +155,117 @@ const Lyrics = {
 
     } catch (e) {
       console.warn('[Lyrics] Lyrics.ovh:', e.message);
+      return false;
+    }
+  },
+
+  async fetchMusixmatch(title, artist) {
+    try {
+      // API publique non officielle — pas de clé requise
+      const q   = encodeURIComponent(artist + ' ' + title);
+      const url = 'https://corsproxy.io/?' + encodeURIComponent(
+        `https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get?format=json&namespace=lyrics_richsynched&subtitle_format=mxm&app_id=web-desktop-app-v1.0&q_track=${encodeURIComponent(title)}&q_artist=${encodeURIComponent(artist)}`
+      );
+
+      const res = await this.fetchWithTimeout(url, 8000);
+      if (!res || !res.ok) return false;
+
+      const data = await res.json();
+      const body = data?.message?.body?.macro_calls;
+
+      // Paroles synchronisées
+      const subtitleBody = body?.['track.subtitles.get']?.message?.body;
+      if (subtitleBody && subtitleBody.subtitle_list && subtitleBody.subtitle_list[0]) {
+        const subtitle = subtitleBody.subtitle_list[0].subtitle;
+        if (subtitle && subtitle.subtitle_body) {
+          try {
+            const parsed = JSON.parse(subtitle.subtitle_body);
+            const lines  = parsed.map(l => ({
+              time:   l.time.total,
+              text:   l.text || '♪',
+              synced: true,
+            })).filter(l => l.text !== '♪' || l.time > 0);
+
+            if (lines.length > 0) {
+              this.setLines(lines, true);
+              this.saveToCache(this.currentSong?.id, lines);
+              if (this.currentSong) this.currentSong.hasLyrics = true;
+              return true;
+            }
+          } catch (e2) {}
+        }
+      }
+
+      // Paroles non synchronisées
+      const lyricsBody = body?.['track.lyrics.get']?.message?.body;
+      if (lyricsBody && lyricsBody.lyrics && lyricsBody.lyrics.lyrics_body) {
+        const text  = lyricsBody.lyrics.lyrics_body.replace(/\*{3}.*$/m, '').trim();
+        const lines = this.parsePlain(text);
+        if (lines.length > 0) {
+          this.setLines(lines, false);
+          this.saveToCache(this.currentSong?.id, lines);
+          if (this.currentSong) this.currentSong.hasLyrics = true;
+          return true;
+        }
+      }
+
+      return false;
+    } catch (e) {
+      console.warn('[Lyrics] Musixmatch:', e.message);
+      return false;
+    }
+  },
+
+  async fetchGenius(title, artist) {
+    try {
+      // Genius API publique — recherche du titre, puis scraping des paroles
+      const q   = encodeURIComponent(artist + ' ' + title);
+      const url = 'https://corsproxy.io/?' + encodeURIComponent(
+        `https://api.genius.com/search?q=${q}`
+      );
+
+      const res = await this.fetchWithTimeout(url, 8000);
+      if (!res || !res.ok) return false;
+
+      const data = await res.json();
+      const hits = data?.response?.hits;
+      if (!hits || hits.length === 0) return false;
+
+      // Prendre le premier résultat
+      const hit     = hits[0].result;
+      const pageUrl = hit && hit.url;
+      if (!pageUrl) return false;
+
+      // Scraper la page Genius pour extraire les paroles
+      const pageRes = await this.fetchWithTimeout(
+        'https://corsproxy.io/?' + encodeURIComponent(pageUrl), 10000
+      );
+      if (!pageRes || !pageRes.ok) return false;
+
+      const html   = await pageRes.text();
+      const parser = new DOMParser();
+      const doc    = parser.parseFromString(html, 'text/html');
+
+      // Genius utilise des divs data-lyrics-container
+      const containers = doc.querySelectorAll('[data-lyrics-container="true"]');
+      if (containers.length === 0) return false;
+
+      let text = '';
+      containers.forEach(el => {
+        el.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+        text += el.textContent + '\n';
+      });
+
+      const lines = this.parsePlain(text.trim());
+      if (lines.length === 0) return false;
+
+      this.setLines(lines, false);
+      this.saveToCache(this.currentSong?.id, lines);
+      if (this.currentSong) this.currentSong.hasLyrics = true;
+      return true;
+
+    } catch (e) {
+      console.warn('[Lyrics] Genius:', e.message);
       return false;
     }
   },

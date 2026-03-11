@@ -236,6 +236,8 @@ const Library = {
           // Vérifier doublon
           const exists = this.songs.find(s => s.fileName === file.name);
           if (exists) {
+            // Re-fetcher si pas de cover
+            if (!exists.cover) this.fetchMetadata(exists);
             pending--;
             if (pending === 0) this.onImportDone(added);
             return;
@@ -274,7 +276,7 @@ const Library = {
     }
   },
 
-  /* Chercher métadonnées via Last.fm puis iTunes pour la cover */
+  /* Chercher métadonnées — cascade complète */
   async fetchMetadata(song) {
     try {
       if (!song || !navigator.onLine) return;
@@ -287,7 +289,7 @@ const Library = {
 
       const base = 'https://corsproxy.io/?';
 
-      // ── Étape 1 : Last.fm pour artiste + album + genre ──────────────
+      // ── Étape 1 : Last.fm — artiste, album, genre, durée ────────────
       try {
         let lfmUrl;
         if (!artist || artist === 'Inconnu') {
@@ -305,41 +307,32 @@ const Library = {
           const lfmData = await lfmRes.json();
 
           if (lfmData && lfmData.track) {
-            // track.getInfo
             const track = lfmData.track;
-            if (track.album) song.album = track.album.title || song.album;
-            if (track.toptags && track.toptags.tag && track.toptags.tag[0]) {
-              song.genre = track.toptags.tag[0].name || '';
+            if (track.album && !song.album) song.album = track.album.title;
+            if (track.toptags && track.toptags.tag && track.toptags.tag[0] && !song.genre) {
+              song.genre = track.toptags.tag[0].name;
             }
             if (track.duration && !song.duration) {
               song.duration = parseInt(track.duration) / 1000;
             }
-            // Pochette Last.fm (souvent vide — on complète avec iTunes après)
             if (track.album && track.album.image) {
               const img = track.album.image.find(i => i.size === 'extralarge' || i.size === 'large');
               if (img && img['#text'] && !img['#text'].includes('2a96cbd8b46e442fc41c2b86b821562f')) {
-                song.cover = img['#text']; // image placeholder Last.fm à exclure
+                song.cover = img['#text'];
               }
             }
-
           } else if (lfmData && lfmData.results && lfmData.results.trackmatches) {
-            // track.search
             const match = lfmData.results.trackmatches.track;
             const first = Array.isArray(match) ? match[0] : match;
             if (first) {
-              if ((!artist || artist === 'Inconnu') && first.artist) {
-                song.artist = first.artist;
-                artist = first.artist;
-              }
+              if ((!artist || artist === 'Inconnu') && first.artist) { song.artist = first.artist; artist = first.artist; }
               if (first.name) { song.title = first.name; title = first.name; }
             }
           }
         }
-      } catch (e) {
-        console.warn('[Library] Last.fm:', e.message);
-      }
+      } catch (e) { console.warn('[Library] Last.fm:', e.message); }
 
-      // ── Étape 2 : iTunes Search pour la pochette (très fiable) ──────
+      // ── Étape 2 : iTunes Search — cover + compléments ───────────────
       if (!song.cover) {
         try {
           const q   = encodeURIComponent((artist && artist !== 'Inconnu' ? artist + ' ' : '') + title);
@@ -348,29 +341,79 @@ const Library = {
           if (res.ok) {
             const data = await res.json();
             if (data && data.results && data.results[0]) {
-              const result = data.results[0];
-              // artworkUrl100 → remplacer par 600x600
-              const art = (result.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+              const r   = data.results[0];
+              const art = (r.artworkUrl100 || '').replace('100x100bb', '600x600bb');
               if (art) song.cover = art;
-              // Compléter les métadonnées manquantes
-              if (!song.album  && result.collectionName)  song.album  = result.collectionName;
-              if (!song.genre  && result.primaryGenreName) song.genre = result.primaryGenreName;
-              if ((!artist || artist === 'Inconnu') && result.artistName) {
-                song.artist = result.artistName;
-              }
+              if (!song.album  && r.collectionName)   song.album  = r.collectionName;
+              if (!song.genre  && r.primaryGenreName) song.genre  = r.primaryGenreName;
+              if ((!song.artist || song.artist === 'Inconnu') && r.artistName) { song.artist = r.artistName; artist = r.artistName; }
             }
           }
-        } catch (e) {
-          console.warn('[Library] iTunes:', e.message);
-        }
+        } catch (e) { console.warn('[Library] iTunes:', e.message); }
+      }
+
+      // ── Étape 3 : Deezer — cover ────────────────────────────────────
+      if (!song.cover) {
+        try {
+          const q   = encodeURIComponent((artist && artist !== 'Inconnu' ? artist + ' ' : '') + title);
+          const url = base + encodeURIComponent(`https://api.deezer.com/search?q=${q}&limit=1`);
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.data && data.data[0]) {
+              const r = data.data[0];
+              if (r.album && r.album.cover_xl) song.cover = r.album.cover_xl;
+              else if (r.album && r.album.cover_big) song.cover = r.album.cover_big;
+              if (!song.album  && r.album && r.album.title) song.album  = r.album.title;
+              if ((!song.artist || song.artist === 'Inconnu') && r.artist && r.artist.name) { song.artist = r.artist.name; artist = r.artist.name; }
+            }
+          }
+        } catch (e) { console.warn('[Library] Deezer:', e.message); }
+      }
+
+      // ── Étape 4 : TheAudioDB — cover track ──────────────────────────
+      if (!song.cover && artist && artist !== 'Inconnu') {
+        try {
+          const url = base + encodeURIComponent(
+            `https://www.theaudiodb.com/api/v1/json/2/searchtrack.php?s=${encodeURIComponent(artist)}&t=${encodeURIComponent(title)}`
+          );
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            const t    = data && data.track && data.track[0];
+            if (t) {
+              if (t.strTrackThumb)  song.cover = t.strTrackThumb;
+              if (!song.album  && t.strAlbum)  song.album  = t.strAlbum;
+              if (!song.genre  && t.strGenre)  song.genre  = t.strGenre;
+            }
+          }
+        } catch (e) { console.warn('[Library] TheAudioDB track:', e.message); }
+      }
+
+      // ── Étape 5 : Cover Art Archive (MusicBrainz) — cover ───────────
+      if (!song.cover && artist && artist !== 'Inconnu') {
+        try {
+          // Chercher le MBID via MusicBrainz
+          const mbUrl = `https://musicbrainz.org/ws/2/recording/?query=recording:${encodeURIComponent(title)}+artist:${encodeURIComponent(artist)}&fmt=json&limit=1`;
+          const mbRes = await fetch(mbUrl, { headers: { 'User-Agent': 'GagMusic/3.0' } });
+          if (mbRes.ok) {
+            const mbData = await mbRes.json();
+            const rec    = mbData && mbData.recordings && mbData.recordings[0];
+            if (rec && rec.releases && rec.releases[0]) {
+              const releaseId = rec.releases[0].id;
+              const caaUrl    = `https://coverartarchive.org/release/${releaseId}/front`;
+              // Cover Art Archive redirige vers l'image — on utilise l'URL directement
+              song.cover = caaUrl;
+            }
+          }
+        } catch (e) { console.warn('[Library] CoverArtArchive:', e.message); }
       }
 
       // ── Sauvegarder et rafraîchir ────────────────────────────────────
       this.buildIndex();
       this.saveToStorage();
       this.renderBiblio();
-      if (typeof showToast === 'function') showToast('✓ ' + (song.title || title));
-      console.log('[Library] Métadonnées:', song.title, '| cover:', !!song.cover);
+      console.log('[Library] Métadonnées:', song.title, '| cover:', !!song.cover, '| album:', song.album, '| genre:', song.genre);
 
     } catch (e) {
       console.warn('[Library] Erreur fetchMetadata:', e.message);
@@ -394,10 +437,8 @@ const Library = {
         showToast('✓ ' + added + ' titre' + (added > 1 ? 's' : '') + ' ajouté' + (added > 1 ? 's' : '') + ' !');
       }
 
-      // Afficher mini lecteur si premier import
       const mini = document.getElementById('mini-player');
       if (mini && this.songs.length > 0) {
-        // Proposer de lire le premier titre
         const first = this.songs[this.songs.length - 1];
         if (first) this.updateContinueCard(first);
       }
@@ -405,6 +446,69 @@ const Library = {
     } catch (e) {
       console.error('[Library] Erreur onImportDone:', e);
     }
+  },
+
+  /* Rafraîchir les métadonnées de toutes les chansons sans cover */
+  async refreshAllMetadata() {
+    try {
+      const missing = this.songs.filter(s =>
+        !s.cover ||
+        !s.album ||
+        !s.genre ||
+        !s.artist || s.artist === 'Inconnu' ||
+        !s.duration
+      );
+
+      if (missing.length === 0) {
+        if (typeof showToast === 'function') showToast('✓ Toutes les métadonnées sont complètes');
+        return;
+      }
+
+      const total = missing.length;
+      let done    = 0;
+
+      // Afficher le panneau de progression
+      this.showCoverProgress(done, total, '');
+
+      for (const song of missing) {
+        this.showCoverProgress(done, total, (song.title || song.fileName || ''));
+        await this.fetchMetadata(song);
+        done++;
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      this.hideCoverProgress();
+      if (typeof showToast === 'function') showToast('✓ ' + done + ' titre' + (done > 1 ? 's' : '') + ' mis à jour !');
+
+    } catch (e) {
+      console.error('[Library] Erreur refreshAllMetadata:', e);
+      this.hideCoverProgress();
+    }
+  },
+
+  showCoverProgress(done, total, songName) {
+    try {
+      let panel = document.getElementById('cover-progress-panel');
+      if (!panel) return;
+
+      panel.classList.remove('hidden');
+
+      const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
+      const fillEl  = document.getElementById('cover-progress-fill');
+      const countEl = document.getElementById('cover-progress-count');
+      const nameEl  = document.getElementById('cover-progress-name');
+
+      if (fillEl)  fillEl.style.width = pct + '%';
+      if (countEl) countEl.textContent = done + ' / ' + total;
+      if (nameEl)  nameEl.textContent  = songName ? '⟳ ' + songName : '⟳ Démarrage...';
+    } catch (e) {}
+  },
+
+  hideCoverProgress() {
+    try {
+      const panel = document.getElementById('cover-progress-panel');
+      if (panel) panel.classList.add('hidden');
+    } catch (e) {}
   },
 
   /* Extraire titre/artiste depuis le nom du fichier */
@@ -838,63 +942,98 @@ const Library = {
     try {
       if (!artist || !artist.name || !navigator.onLine) return;
 
-      const name = encodeURIComponent(artist.name);
+      const name  = artist.name;
+      const proxy = 'https://corsproxy.io/?';
+      if (!artist.info) artist.info = {};
 
-      // 1. TheAudioDB (photo)
+      // ── 1. TheAudioDB — photo + bio ──────────────────────────────────
       try {
-        const proxy = 'https://corsproxy.io/?';
-        const url   = proxy + encodeURIComponent(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${name}`);
-        const res   = await fetch(url);
+        const url = proxy + encodeURIComponent(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(name)}`);
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           const a    = data && data.artists && data.artists[0];
           if (a) {
-            if (!artist.info) artist.info = {};
-            if (a.strArtistThumb) artist.info.photo = a.strArtistThumb;
-            if (a.strBiographyFR || a.strBiographyEN) {
-              artist.info.bio = (a.strBiographyFR || a.strBiographyEN || '').slice(0, 400);
+            if (a.strArtistThumb && !artist.info.photo) artist.info.photo = a.strArtistThumb;
+            if (!artist.info.bio) {
+              artist.info.bio = (a.strBiographyFR || a.strBiographyEN || '').slice(0, 500) || '';
             }
           }
         }
-      } catch (e) {
-        console.warn('[Library] TheAudioDB:', e.message);
+      } catch (e) { console.warn('[Library] TheAudioDB artiste:', e.message); }
+
+      // ── 2. Last.fm — bio artiste ─────────────────────────────────────
+      if (!artist.info.bio) {
+        try {
+          const API_KEY = '40bc3f6da0ab7f2cf73ec36834d75262';
+          const url = proxy + encodeURIComponent(
+            `https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(name)}&api_key=${API_KEY}&format=json`
+          );
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            const bio  = data && data.artist && data.artist.bio && data.artist.bio.summary;
+            if (bio) {
+              // Nettoyer le lien "Read more" que Last.fm ajoute
+              artist.info.bio = bio.replace(/<a[^>]*>.*?<\/a>/gi, '').replace(/<[^>]+>/g, '').trim().slice(0, 500);
+            }
+          }
+        } catch (e) { console.warn('[Library] Last.fm artiste:', e.message); }
       }
 
-      // 2. Wikipedia (bio si pas encore trouvée)
-      if (!artist.info || !artist.info.bio) {
+      // ── 3. Wikipedia FR → EN — bio ───────────────────────────────────
+      if (!artist.info.bio) {
         try {
-          const wikiUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${name}`;
+          const wikiUrl = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
           const res = await fetch(wikiUrl);
           if (res.ok) {
             const data = await res.json();
-            if (data && data.extract) {
-              if (!artist.info) artist.info = {};
-              artist.info.bio = data.extract.slice(0, 400);
+            if (data && data.extract) artist.info.bio = data.extract.slice(0, 500);
+          }
+        } catch (e) { console.warn('[Library] Wikipedia FR:', e.message); }
+      }
+
+      if (!artist.info.bio) {
+        try {
+          const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+          const res = await fetch(wikiUrl);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.extract) artist.info.bio = data.extract.slice(0, 500);
+          }
+        } catch (e) { console.warn('[Library] Wikipedia EN:', e.message); }
+      }
+
+      // ── 4. MusicBrainz — tags / infos complémentaires ────────────────
+      if (!artist.info.bio) {
+        try {
+          const url = `https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(name)}&fmt=json&limit=1`;
+          const res = await fetch(url, { headers: { 'User-Agent': 'GagMusic/3.0' } });
+          if (res.ok) {
+            const data = await res.json();
+            const a    = data && data.artists && data.artists[0];
+            if (a && a.disambiguation) {
+              artist.info.bio = a.disambiguation;
             }
           }
-        } catch (e) {
-          console.warn('[Library] Wikipedia:', e.message);
-        }
+        } catch (e) { console.warn('[Library] MusicBrainz artiste:', e.message); }
       }
 
-      // Mettre à jour l'affichage si le détail artiste est ouvert
-      if (artist.info) {
-        const bgEl  = document.getElementById('artiste-hero-bg');
-        const bioEl = document.getElementById('artiste-bio-text');
-        const bioWrap = document.getElementById('artiste-bio-wrap');
+      // ── Mettre à jour l'affichage ────────────────────────────────────
+      const bgEl    = document.getElementById('artiste-hero-bg');
+      const bioEl   = document.getElementById('artiste-bio-text');
+      const bioWrap = document.getElementById('artiste-bio-wrap');
 
-        if (bgEl && artist.info.photo) {
-          bgEl.innerHTML = `<img src="${artist.info.photo}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
-        }
-        if (bioEl && artist.info.bio) {
-          bioEl.textContent = artist.info.bio;
-          bioWrap?.removeAttribute('style');
-        }
-
-        // Mettre à jour photo dans la liste
-        this.renderArtistes();
-        this.saveToStorage();
+      if (bgEl && artist.info.photo) {
+        bgEl.innerHTML = `<img src="${artist.info.photo}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
       }
+      if (bioEl && artist.info.bio) {
+        bioEl.textContent = artist.info.bio;
+        bioWrap?.removeAttribute('style');
+      }
+
+      this.renderArtistes();
+      this.saveToStorage();
 
     } catch (e) {
       console.warn('[Library] Erreur fetchArtistInfo:', e.message);
