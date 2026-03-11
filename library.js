@@ -47,6 +47,8 @@ const Library = {
       if (rawStats) this.stats = JSON.parse(rawStats) || {};
 
       this.buildIndex();
+      // Restaurer les URLs blob depuis IndexedDB
+      this.restoreURLs();
     } catch (e) {
       console.warn('[Library] Erreur chargement storage:', e);
       this.songs     = [];
@@ -104,6 +106,72 @@ const Library = {
   },
 
   /* ═══════════════════════════════════════════════════════
+     INDEXEDDB — stockage fichiers audio
+     ═══════════════════════════════════════════════════════ */
+
+  openDB() {
+    return new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open('gagmusic', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('files')) {
+            db.createObjectStore('files', { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror   = (e) => reject(e.target.error);
+      } catch (e) { reject(e); }
+    });
+  },
+
+  async saveFileDB(id, file) {
+    try {
+      const db = await this.openDB();
+      return new Promise((resolve, reject) => {
+        const tx    = db.transaction('files', 'readwrite');
+        const store = tx.objectStore('files');
+        store.put({ id, file });
+        tx.oncomplete = () => resolve();
+        tx.onerror    = (e) => reject(e.target.error);
+      });
+    } catch (e) {
+      console.warn('[Library] Erreur saveFileDB:', e);
+    }
+  },
+
+  async getFileDB(id) {
+    try {
+      const db = await this.openDB();
+      return new Promise((resolve, reject) => {
+        const tx    = db.transaction('files', 'readonly');
+        const store = tx.objectStore('files');
+        const req   = store.get(id);
+        req.onsuccess = (e) => resolve(e.target.result ? e.target.result.file : null);
+        req.onerror   = (e) => reject(e.target.error);
+      });
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /* Recharger les URLs blob après refresh */
+  async restoreURLs() {
+    try {
+      for (const song of this.songs) {
+        if (song.fileName && !song.path.startsWith('http')) {
+          const file = await this.getFileDB(song.id);
+          if (file) {
+            song.path = URL.createObjectURL(file);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Library] Erreur restoreURLs:', e);
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════════
      IMPORT FICHIERS (bouton 🎵)
      ═══════════════════════════════════════════════════════ */
 
@@ -113,17 +181,12 @@ const Library = {
       const importInput = document.getElementById('import-input');
       if (!btnImport || !importInput) return;
 
-      // Clic sur 🎵 → ouvrir sélecteur fichiers
-      btnImport.addEventListener('click', () => {
-        importInput.click();
-      });
+      btnImport.addEventListener('click', () => importInput.click());
 
-      // Fichiers sélectionnés
       importInput.addEventListener('change', (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
         this.importFiles(files);
-        // Réinitialiser pour permettre de re-sélectionner
         importInput.value = '';
       });
 
@@ -147,52 +210,54 @@ const Library = {
         try {
           if (!file || !file.type.startsWith('audio/')) {
             pending--;
+            if (pending === 0) this.onImportDone(added);
             return;
           }
 
-          // Créer URL locale pour lecture
-          const url = URL.createObjectURL(file);
-
-          // Extraire infos depuis le nom de fichier
           const info = this.parseFileName(file.name);
+          const id   = this.generateId();
+          const url  = URL.createObjectURL(file);
 
           const song = {
-            id:       this.generateId(),
+            id,
             title:    info.title,
             artist:   info.artist,
-            album:    info.album  || '',
+            album:    info.album || '',
             genre:    '',
             duration: 0,
             path:     url,
             cover:    null,
             addedAt:  Date.now(),
             hasLyrics: false,
-            fileSize: file.size,
-            fileName: file.name,
+            fileSize:  file.size,
+            fileName:  file.name,
           };
 
-          // Lire la durée via Audio
+          // Vérifier doublon
+          const exists = this.songs.find(s => s.fileName === file.name);
+          if (exists) {
+            pending--;
+            if (pending === 0) this.onImportDone(added);
+            return;
+          }
+
+          // Lire durée
           const audio = new Audio();
           audio.preload = 'metadata';
           audio.src = url;
-
           audio.addEventListener('loadedmetadata', () => {
-            try {
-              song.duration = audio.duration || 0;
-              audio.src = '';
-            } catch (e) {}
+            song.duration = audio.duration || 0;
+            audio.src = '';
           });
 
-          audio.addEventListener('error', () => {
-            try { audio.src = ''; } catch(e) {}
-          });
+          // Sauvegarder fichier dans IndexedDB
+          this.saveFileDB(id, file).catch(e => console.warn('[Library] IndexedDB:', e));
 
-          // Vérifier doublon par nom de fichier
-          const exists = this.songs.find(s => s.fileName === file.name);
-          if (!exists) {
-            this.songs.push(song);
-            added++;
-          }
+          this.songs.push(song);
+          added++;
+
+          // Chercher métadonnées en arrière-plan
+          this.fetchMetadata(song);
 
           pending--;
           if (pending === 0) this.onImportDone(added);
@@ -208,6 +273,62 @@ const Library = {
       console.error('[Library] Erreur importFiles:', e);
     }
   },
+
+  /* Chercher métadonnées via Last.fm */
+  async fetchMetadata(song) {
+    try {
+      if (!song || !navigator.onLine) return;
+
+      const API_KEY = '40bc3f6da0ab7f2cf73ec36834d75262';
+      const title   = encodeURIComponent(song.title  || '');
+      const artist  = encodeURIComponent(song.artist || '');
+
+      if (!title || artist === 'Inconnu') return;
+
+      const url = `https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key=${API_KEY}&artist=${artist}&track=${title}&format=json`;
+
+      const res = await fetch(url);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!data || !data.track) return;
+
+      const track = data.track;
+
+      // Mettre à jour les infos
+      if (track.album) {
+        song.album = track.album.title || song.album;
+
+        // Pochette
+        const images = track.album.image || [];
+        const large  = images.find(img => img.size === 'extralarge' || img.size === 'large');
+        if (large && large['#text']) {
+          song.cover = large['#text'];
+        }
+      }
+
+      // Genre
+      if (track.toptags && track.toptags.tag && track.toptags.tag[0]) {
+        song.genre = track.toptags.tag[0].name || '';
+      }
+
+      // Durée (en ms dans Last.fm)
+      if (track.duration && !song.duration) {
+        song.duration = parseInt(track.duration) / 1000;
+      }
+
+      // Sauvegarder et rafraîchir
+      this.saveToStorage();
+      this.renderBiblio();
+
+      console.log('[Library] Métadonnées récupérées:', song.title);
+
+    } catch (e) {
+      console.warn('[Library] Erreur fetchMetadata:', e.message);
+    }
+  },
+
+
 
   onImportDone(added) {
     try {
