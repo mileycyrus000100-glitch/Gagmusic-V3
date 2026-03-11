@@ -1,528 +1,554 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0a0a0f">
-  <title>GagMusic</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GagMusic v3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-<div id="app">
+<body data-theme="gagnote">
 
-  <!-- ═══════════════════ HEADER ═══════════════════ -->
-  <div id="header">
-    <div id="header-left">
-      <div id="greeting">🌙 Bonne nuit</div>
-      <div id="app-title">♪ Gag<span>Music</span></div>
+  <!-- ═══════════════════════════════════════════
+       HEADER
+  ═══════════════════════════════════════════ -->
+  <header id="app-header">
+    <div class="header-greeting">
+      <span id="greeting-icon">☀️</span>
+      <span id="greeting-text">Bon après-midi, <strong>Cardi</strong></span>
     </div>
-    <div id="header-right">
-      <button class="btn-scan" id="btn-scan">⟳ SCAN</button>
-      <button class="btn-icon btn-import" id="btn-import" title="Importer des musiques">🎵</button>
-      <input type="file" id="import-input" accept="audio/*" multiple style="display:none;">
-      <button class="btn-icon" id="btn-settings">⚙</button>
+    <div class="header-actions">
+      <button class="btn-icon" id="btn-scan" title="Scanner">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <span>SCAN</span>
+      </button>
+      <button class="btn-icon" id="btn-settings" title="Réglages">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
     </div>
-  </div>
+  </header>
 
-  <!-- ═══════════════════ ONGLETS ═══════════════════ -->
-  <div id="tabs">
-    <button class="tab active" data-tab="accueil"><span class="tab-icon">🏠</span><span class="tab-label">Accueil</span></button>
-    <button class="tab" data-tab="biblio"><span class="tab-icon">📚</span><span class="tab-label">Biblio</span></button>
-    <button class="tab" data-tab="artistes"><span class="tab-icon">👤</span><span class="tab-label">Artistes</span></button>
-    <button class="tab" data-tab="playlists"><span class="tab-icon">🎵</span><span class="tab-label">Playlists</span></button>
-    <button class="tab" data-tab="stats"><span class="tab-icon">📊</span><span class="tab-label">Stats</span></button>
-    <button class="tab" data-tab="ensemble"><span class="tab-icon">🎧</span><span class="tab-label">Ensemble</span></button>
-  </div>
+  <!-- ═══════════════════════════════════════════
+       CONTENU PRINCIPAL (écrans)
+  ═══════════════════════════════════════════ -->
+  <main id="app-main">
 
-  <!-- ═══════════════════ CONTENU ═══════════════════ -->
-  <div id="content">
-
-    <!-- ACCUEIL -->
-    <div class="screen active" id="screen-accueil">
-      <div id="today-stats">
-        <div class="stat-item"><div class="stat-num" id="stat-titres">0</div><div class="stat-label">TITRES</div></div>
-        <div class="stat-item"><div class="stat-num" id="stat-temps">0min</div><div class="stat-label">ÉCOUTÉ</div></div>
-        <div class="stat-item"><div class="stat-num" id="stat-artistes">0</div><div class="stat-label">ARTISTES</div></div>
-      </div>
-      <div id="continue-card" class="continue-card hidden">
-        <div class="continue-thumb" id="continue-thumb">🎵</div>
-        <div class="continue-info">
-          <div class="continue-label">▶ CONTINUER</div>
-          <div class="continue-title" id="continue-title">—</div>
-          <div class="continue-artist" id="continue-artist">—</div>
-          <div class="continue-progress"><div class="continue-bar" id="continue-bar"></div></div>
-        </div>
-        <button class="btn-play-sm" id="continue-btn">▶</button>
-      </div>
-      <div class="section-title">🔥 Chanson du moment</div>
-      <div id="moment-card" class="moment-card hidden">
-        <div class="moment-thumb" id="moment-thumb">🎵</div>
-        <div>
-          <div class="moment-badge">🔥 CETTE SEMAINE</div>
-          <div class="moment-title" id="moment-title">—</div>
-          <div class="moment-artist" id="moment-artist">—</div>
-          <div class="moment-count" id="moment-count">—</div>
+    <!-- ─── ACCUEIL ─── -->
+    <section id="screen-home" class="screen active">
+      <div class="section-block">
+        <div class="today-stats">
+          <span class="stat-item">♪ <strong>12</strong> titres</span>
+          <span class="stat-sep">·</span>
+          <span class="stat-item"><strong>47</strong> min</span>
         </div>
       </div>
-      <div class="section-title">🕐 Récemment écouté</div>
-      <div class="h-scroll" id="recent-scroll"></div>
-      <div class="coeur-card">
-        <div class="coeur-title-row">
-          <div class="section-title" style="margin:0;">❤ Coups de cœur</div>
-          <div class="coeur-badge">Reset lundi</div>
-        </div>
-        <div id="coeur-list"></div>
-      </div>
-      <div class="section-title">🆕 Ajoutés récemment</div>
-      <div class="h-scroll" id="new-scroll"></div>
-      <div class="oublies-card">
-        <div class="oublies-row">
-          <div class="section-title" style="margin:0;">😴 Oubliés</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <div class="oublies-badge">+30 jours</div>
-            <button class="sort-inline" id="oublies-sort">⇅</button>
+
+      <div class="section-block">
+        <h2 class="section-title">⟳ Continuer l'écoute</h2>
+        <div class="continue-card">
+          <div class="cover-thumb cover-thumb--playing">🎵</div>
+          <div class="continue-info">
+            <span class="track-name">River</span>
+            <span class="track-artist">Eminem · <em>2:34 restant</em></span>
           </div>
-        </div>
-        <div id="oublies-list"></div>
-      </div>
-    </div>
-
-    <!-- BIBLIO -->
-    <div class="screen" id="screen-biblio">
-      <div class="biblio-header">
-        <div class="biblio-count" id="biblio-count">0 titres</div>
-        <div class="search-box">
-          <span>🔍</span>
-          <input type="text" id="search-input" placeholder="Rechercher..." autocomplete="off">
-        </div>
-        <button class="sort-btn" id="sort-btn">⇅ A–Z</button>
-      </div>
-      <div class="sort-menu hidden" id="sort-menu">
-        <div class="sort-option active" data-sort="az">A → Z</div>
-        <div class="sort-option" data-sort="za">Z → A</div>
-        <div class="sort-option" data-sort="recent">Plus récent</div>
-        <div class="sort-option" data-sort="plays">Plus écouté</div>
-        <div class="sort-option" data-sort="duration">Durée</div>
-      </div>
-      <div id="biblio-list"></div>
-    </div>
-
-    <!-- ARTISTES -->
-    <div class="screen" id="screen-artistes">
-      <div class="search-bar-wrap">
-        <input class="search-input" id="search-artiste" placeholder="🔍 Rechercher un artiste..." type="search">
-      </div>
-      <div id="artistes-list"></div>
-    </div>
-
-    <!-- ARTISTE DÉTAIL -->
-    <div class="subscreen hidden" id="screen-artiste-detail">
-      <div class="subscreen-header">
-        <button class="back-btn" id="back-artiste">‹</button>
-        <div class="subscreen-title" id="artiste-detail-nom">—</div>
-      </div>
-      <div id="artiste-detail-content"></div>
-    </div>
-
-    <!-- PLAYLISTS -->
-    <div class="screen" id="screen-playlists">
-      <div class="section-title">Smart Playlists</div>
-      <div class="smart-grid">
-        <div class="smart-card" data-smart="top"><div class="smart-icon">🔥</div><div class="smart-label">Top</div></div>
-        <div class="smart-card" data-smart="recent"><div class="smart-icon">🕐</div><div class="smart-label">Récents</div></div>
-        <div class="smart-card" data-smart="coeur"><div class="smart-icon">❤</div><div class="smart-label">Coups de cœur</div></div>
-        <div class="smart-card" data-smart="lyrics"><div class="smart-icon">🎤</div><div class="smart-label">Paroles</div></div>
-        <div class="smart-card" data-smart="night"><div class="smart-icon">🌙</div><div class="smart-label">Nuit</div></div>
-        <div class="smart-card" data-smart="energy"><div class="smart-icon">⚡</div><div class="smart-label">Énergie</div></div>
-        <div class="smart-card" data-smart="genre"><div class="smart-icon">🎸</div><div class="smart-label">Genre</div></div>
-        <div class="smart-card" data-smart="albums"><div class="smart-icon">💿</div><div class="smart-label">Albums</div></div>
-      </div>
-      <div class="section-title">Mes Playlists</div>
-      <div class="btn-create" id="btn-create-playlist">
-        <div class="btn-create-icon">+</div>
-        <div class="btn-create-text">Créer une playlist</div>
-      </div>
-      <div id="playlists-list"></div>
-    </div>
-
-    <!-- PLAYLIST DÉTAIL -->
-    <div class="subscreen hidden" id="screen-playlist-detail">
-      <div class="subscreen-header">
-        <button class="back-btn" id="back-playlist">‹</button>
-        <div class="subscreen-title" id="playlist-detail-nom">—</div>
-      </div>
-      <div id="playlist-detail-content"></div>
-    </div>
-
-    <!-- STATS -->
-    <div class="screen" id="screen-stats">
-      <div class="stats-topbar">
-        <div class="period-tabs" id="period-tabs">
-          <button class="period-tab active" data-period="jour">Jour</button>
-          <button class="period-tab" data-period="sem">Sem</button>
-          <button class="period-tab" data-period="mois">Mois</button>
-          <button class="period-tab" data-period="an">An</button>
-          <button class="period-tab" data-period="total">Total</button>
-        </div>
-        <div class="stats-actions">
-          <button class="stats-action-btn" id="stats-calendar-btn" title="Calendrier">📅</button>
-          <button class="stats-action-btn" id="stats-details-btn" title="Détails">◈</button>
+          <button class="btn-play-sm">▶</button>
         </div>
       </div>
-      <div id="stats-content"></div>
-    </div>
 
-    <!-- ENSEMBLE -->
-    <div class="screen" id="screen-ensemble">
-      <div class="ensemble-hero">
-        <div class="ensemble-icon">🎧</div>
-        <div class="ensemble-title">Écoute Ensemble</div>
-        <div class="ensemble-sub">Écoute de la musique en temps réel<br>avec tes amis</div>
-      </div>
-      <div class="ensemble-btn" id="btn-creer-session">
-        <div class="ensemble-btn-icon">✨</div>
-        <div class="ensemble-btn-text">
-          <div class="ensemble-btn-title">Créer une session</div>
-          <div class="ensemble-btn-sub">Invite jusqu'à 4 amis</div>
-        </div>
-        <div class="ensemble-btn-arrow">›</div>
-      </div>
-      <div class="join-box">
-        <div class="join-label">REJOINDRE UNE SESSION</div>
-        <div class="join-input-row">
-          <input class="join-input" id="join-code" placeholder="Code ex: AB3X7K" maxlength="6">
-          <button class="btn-join" id="btn-join">Rejoindre</button>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /content -->
-
-  <!-- ═══════════════════ MINI LECTEUR ═══════════════════ -->
-  <div id="mini-player" class="hidden">
-    <div id="mini-player-bg"></div>
-    <div id="mini-player-content">
-      <div id="mini-thumb"><div id="vinyl"></div></div>
-      <div id="mini-info">
-        <div id="mini-title">—</div>
-        <div id="mini-artist">—</div>
-        <div id="mini-album">—</div>
-      </div>
-      <div id="mini-controls">
-        <button class="mini-btn" id="mini-prev">⏮</button>
-        <button class="mini-btn play" id="mini-play">⏸</button>
-        <button class="mini-btn" id="mini-next">⏭</button>
-      </div>
-    </div>
-    <div id="mini-progress"><div id="mini-bar"></div></div>
-  </div>
-
-  <!-- ═══════════════════ LECTEUR PLEIN ÉCRAN ═══════════════════ -->
-  <div id="player-screen">
-    <div id="player-bg"></div>
-    <div id="player-art">🎵</div>
-
-    <!-- CARROUSEL 3 VUES : Infos ← Lecteur → Paroles -->
-    <div id="player-carousel">
-
-      <!-- VUE 0 : INFOS -->
-      <div class="player-view" id="player-view-infos">
-        <div class="player-view-header">
-          <button id="player-down-infos">⌄</button>
-          <div class="player-view-label">INFOS</div>
-          <button id="player-menu-btn-infos">···</button>
-        </div>
-        <div id="player-infos-content">
-          <div class="info-row"><div class="info-label">TITRE</div><div class="info-val" id="info-title">—</div></div>
-          <div class="info-row"><div class="info-label">ARTISTE</div><div class="info-val" id="info-artist">—</div></div>
-          <div class="info-row"><div class="info-label">ALBUM</div><div class="info-val" id="info-album">—</div></div>
-          <div class="info-row"><div class="info-label">GENRE</div><div class="info-val" id="info-genre">—</div></div>
-          <div class="info-row"><div class="info-label">DURÉE</div><div class="info-val" id="info-duration">—</div></div>
-          <div class="info-row"><div class="info-label">ÉCOUTES</div><div class="info-val" id="info-plays">0</div></div>
-          <div class="info-row"><div class="info-label">AJOUTÉ</div><div class="info-val" id="info-added">—</div></div>
-          <div class="info-row"><div class="info-label">FICHIER</div><div class="info-val" id="info-file">—</div></div>
-        </div>
-        <div class="swipe-hint">Swipe → pour le lecteur</div>
-      </div>
-
-      <!-- VUE 1 : LECTEUR PRINCIPAL -->
-      <div class="player-view active" id="player-view-main">
-        <div id="player-header">
-          <button id="player-down">⌄</button>
-          <div id="player-title-wrap">
-            <div id="player-title">—</div>
-            <div id="player-artist">—</div>
+      <div class="section-block moment-block">
+        <h2 class="section-title">✦ MOMENT</h2>
+        <div class="moment-card">
+          <div class="cover-thumb">🌟</div>
+          <div class="moment-info">
+            <span class="track-name">Starboy</span>
+            <span class="track-artist">The Weeknd</span>
           </div>
-          <button id="player-menu-btn">···</button>
+          <button class="btn-play-lg">▶</button>
         </div>
-        <div id="player-lyrics-preview">
-          <div id="player-lyrics-line1"></div>
-          <div id="player-lyrics-line2"></div>
+      </div>
+
+      <div class="section-block">
+        <h2 class="section-title">Récemment joués</h2>
+        <ul class="track-list">
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Blinding Lights</span><span class="track-artist">The Weeknd</span></div>
+            <button class="btn-more">···</button>
+          </li>
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Hello</span><span class="track-artist">Adele</span></div>
+            <button class="btn-more">···</button>
+          </li>
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Levitating</span><span class="track-artist">Dua Lipa</span></div>
+            <button class="btn-more">···</button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="section-block">
+        <h2 class="section-title">💛 Coups de cœur</h2>
+        <div class="album-grid">
+          <div class="album-card">🎵</div>
+          <div class="album-card">🎵</div>
+          <div class="album-card">🎵</div>
+          <div class="album-card">🎵</div>
         </div>
-        <div id="player-dots">
-          <div class="dot active-dot" id="dot-infos"></div>
-          <div class="dot active" id="dot-main"></div>
-          <div class="dot active-dot" id="dot-paroles"></div>
-        </div>
-        <div id="player-actions">
-          <button class="action-btn" id="btn-like">♡</button>
-          <button class="action-btn" id="btn-queue">⊕</button>
-          <button class="action-btn" id="btn-options">···</button>
-        </div>
-        <div id="player-progress-wrap">
-          <div id="player-progress"><div id="player-bar"></div></div>
-          <div id="player-times">
-            <span id="player-time-current">0:00</span>
-            <span id="player-time-total">0:00</span>
+      </div>
+
+      <div class="section-block">
+        <h2 class="section-title">Récemment ajoutés</h2>
+        <ul class="track-list">
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Houdini</span><span class="track-artist">Dua Lipa</span></div>
+            <button class="btn-more">···</button>
+          </li>
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Espresso</span><span class="track-artist">Sabrina Carpenter</span></div>
+            <button class="btn-more">···</button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="section-block">
+        <h2 class="section-title">⏳ Oubliés <button class="btn-sort">⇅</button></h2>
+        <ul class="track-list">
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Superstition</span><span class="track-artist">Stevie Wonder</span></div>
+            <button class="btn-more">···</button>
+          </li>
+          <li class="track-item">
+            <div class="cover-thumb">🎵</div>
+            <div class="track-meta"><span class="track-name">Roxanne</span><span class="track-artist">The Police</span></div>
+            <button class="btn-more">···</button>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ─── BIBLIOTHÈQUE ─── -->
+    <section id="screen-library" class="screen">
+      <div class="screen-header">
+        <h1 class="screen-title">Bibliothèque</h1>
+      </div>
+      <div class="search-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" placeholder="Rechercher un titre..." />
+      </div>
+      <div class="library-meta">
+        <span class="sort-btn">Tri : Titre ▾</span>
+        <span class="track-count">512 titres</span>
+      </div>
+      <ul class="track-list track-list--library">
+        <li class="alpha-separator">A</li>
+        <li class="track-item">
+          <div class="cover-thumb">🎵</div>
+          <div class="track-meta">
+            <span class="track-name">Hello <span class="lyrics-badge">🗒</span></span>
+            <span class="track-artist">Adele · 3:46</span>
           </div>
-        </div>
-        <div id="player-skip-row">
-          <button class="skip-btn" id="btn-rewind"><span class="skip-icon">«</span>10s</button>
-          <div id="player-controls">
-            <button class="ctrl-btn" id="btn-shuffle">⇄</button>
-            <button class="ctrl-btn" id="btn-prev">⏮</button>
-            <button id="btn-play-main">▶</button>
-            <button class="ctrl-btn" id="btn-next">⏭</button>
-            <button class="ctrl-btn" id="btn-queue-panel">≋</button>
+          <button class="btn-like">♡</button>
+          <button class="btn-more">···</button>
+        </li>
+        <li class="track-item track-item--playing">
+          <div class="cover-thumb cover-thumb--eq">
+            <span class="eq-bars"><span></span><span></span><span></span><span></span><span></span></span>
           </div>
-          <button class="skip-btn" id="btn-forward">10s<span class="skip-icon">»</span></button>
-        </div>
-      </div>
-
-      <!-- VUE 2 : PAROLES -->
-      <div class="player-view" id="player-view-paroles">
-        <div class="player-view-header">
-          <button id="player-down-paroles">⌄</button>
-          <div class="player-view-label" id="paroles-song-title">PAROLES</div>
-          <div class="paroles-actions">
-            <button class="paroles-btn" id="btn-eq" title="Son">🎛</button>
-            <button class="paroles-btn" id="btn-sync" title="Sync">🎚</button>
-            <button class="paroles-btn" id="btn-translate" title="Traduire">🌐</button>
+          <div class="track-meta">
+            <span class="track-name">Bangkok City <span class="playing-label">EN LECTURE</span></span>
+            <span class="track-artist">Unknown · 4:02</span>
           </div>
-        </div>
-        <div id="paroles-list"></div>
-        <div class="swipe-hint">Swipe ← pour le lecteur</div>
-
-        <!-- Panneau Son -->
-        <div id="panel-son" class="bottom-panel hidden">
-          <div class="panel-title">🎛 Son</div>
-          <div class="eq-presets">
-            <button class="eq-btn active" data-preset="normal">Normal</button>
-            <button class="eq-btn" data-preset="bass">Bass</button>
-            <button class="eq-btn" data-preset="rock">Rock</button>
-            <button class="eq-btn" data-preset="pop">Pop</button>
-            <button class="eq-btn" data-preset="electro">Électro</button>
-            <button class="eq-btn" data-preset="jazz">Jazz</button>
-            <button class="eq-btn" data-preset="classique">Classique</button>
-            <button class="eq-btn" data-preset="party">Party</button>
-            <button class="eq-btn" data-preset="night">Night</button>
+          <button class="btn-like">♡</button>
+          <button class="btn-more">···</button>
+        </li>
+        <li class="alpha-separator">B</li>
+        <li class="track-item">
+          <div class="cover-thumb">🎵</div>
+          <div class="track-meta">
+            <span class="track-name">Crazy in Love <span class="lyrics-badge">🗒</span></span>
+            <span class="track-artist">Beyoncé · 3:56</span>
           </div>
-        </div>
-
-        <!-- Panneau Sync -->
-        <div id="panel-sync" class="bottom-panel hidden">
-          <div class="panel-title">🎚 Synchronisation</div>
-          <div class="sync-row">
-            <button class="sync-btn" id="sync-minus">← -0.5s</button>
-            <button class="sync-auto" id="sync-auto">✦ auto</button>
-            <button class="sync-btn" id="sync-plus">+0.5s →</button>
+          <button class="btn-like liked">♥</button>
+          <button class="btn-more">···</button>
+        </li>
+        <li class="alpha-separator">E</li>
+        <li class="track-item">
+          <div class="cover-thumb">🎵</div>
+          <div class="track-meta">
+            <span class="track-name">Espresso</span>
+            <span class="track-artist">Sabrina Carpenter · 2:55</span>
           </div>
-          <div class="font-row">
-            <div class="font-label">Taille</div>
-            <button class="font-btn" data-size="sm">A-</button>
-            <button class="font-btn active" data-size="md">A</button>
-            <button class="font-btn" data-size="lg">A+</button>
+          <button class="btn-like">♡</button>
+          <button class="btn-more">···</button>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ─── ARTISTES ─── -->
+    <section id="screen-artists" class="screen">
+      <div class="screen-header">
+        <h1 class="screen-title">Artistes</h1>
+      </div>
+      <div class="search-bar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" placeholder="Rechercher un artiste..." />
+      </div>
+      <div class="artist-grid">
+        <div class="artist-card">
+          <div class="artist-avatar">E</div>
+          <span class="artist-name">Eminem</span>
+          <span class="artist-count">8 titres</span>
+        </div>
+        <div class="artist-card">
+          <div class="artist-avatar">T</div>
+          <span class="artist-name">The Weeknd</span>
+          <span class="artist-count">12 titres</span>
+        </div>
+        <div class="artist-card">
+          <div class="artist-avatar">D</div>
+          <span class="artist-name">Dua Lipa</span>
+          <span class="artist-count">6 titres</span>
+        </div>
+        <div class="artist-card">
+          <div class="artist-avatar">A</div>
+          <span class="artist-name">Adele</span>
+          <span class="artist-count">5 titres</span>
+        </div>
+        <div class="artist-card">
+          <div class="artist-avatar">B</div>
+          <span class="artist-name">Beyoncé</span>
+          <span class="artist-count">9 titres</span>
+        </div>
+        <div class="artist-card">
+          <div class="artist-avatar">S</div>
+          <span class="artist-name">Sabrina C.</span>
+          <span class="artist-count">4 titres</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PLAYLISTS ─── -->
+    <section id="screen-playlists" class="screen">
+      <div class="screen-header">
+        <h1 class="screen-title">Playlists</h1>
+        <button class="btn-new">+ Nouvelle</button>
+      </div>
+      <ul class="playlist-list">
+        <li class="playlist-item">
+          <div class="playlist-cover">🎵</div>
+          <div class="playlist-meta">
+            <span class="playlist-name">Favoris</span>
+            <span class="playlist-count">24 titres</span>
           </div>
-        </div>
-      </div>
-
-    </div><!-- /player-carousel -->
-
-    <!-- BARRE VOLUME (droite) -->
-    <div id="volume-bar-wrap" class="hidden">
-      <div id="volume-bar-track">
-        <div id="volume-bar-fill"></div>
-      </div>
-      <div id="volume-pct">100%</div>
-    </div>
-
-    <!-- PANNEAU FILE D'ATTENTE -->
-    <div id="queue-panel" class="hidden">
-      <div class="queue-header">
-        <div class="queue-title">≋ File d'attente</div>
-        <button id="queue-close">✕</button>
-      </div>
-      <div id="queue-list"></div>
-    </div>
-    <div id="queue-overlay" class="hidden"></div>
-
-  </div>
-
-  <!-- ═══════════════════ RÉGLAGES ═══════════════════ -->
-  <div id="settings-screen">
-    <div class="overlay-header">
-      <button class="back-btn" id="back-settings">‹</button>
-      <div class="overlay-title">Réglages</div>
-    </div>
-    <div id="settings-content">
-      <div class="settings-section">
-        <div class="settings-label">Compte</div>
-        <div class="settings-item" id="settings-compte">
-          <div class="settings-icon">👤</div>
-          <div class="settings-text">Se connecter</div>
-          <div class="settings-arrow">›</div>
-        </div>
-      </div>
-      <div class="settings-section">
-        <div class="settings-label">Bibliothèque</div>
-        <div class="settings-item" id="settings-refresh-covers">
-          <div class="settings-icon">🖼</div>
-          <div class="settings-text">Récupérer les métadonnées manquantes</div>
-          <div class="settings-arrow">›</div>
-        </div>
-      </div>
-      <div class="settings-section">
-        <div class="settings-label">Apparence</div>
-        <div class="settings-item" id="settings-theme">
-          <div class="settings-icon" id="theme-icon">🌙</div>
-          <div class="settings-text">Thème</div>
-          <div class="settings-value" id="theme-value">Sombre</div>
-          <div class="settings-arrow">›</div>
-        </div>
-        <div class="accent-row">
-          <div class="accent-label">Couleur accent</div>
-          <div class="accent-colors" id="accent-colors">
-            <div class="accent-dot selected" data-accent="#c084fc" data-dark="#7c3aed" style="background:#c084fc;"></div>
-            <div class="accent-dot" data-accent="#f472b6" data-dark="#be185d" style="background:#f472b6;"></div>
-            <div class="accent-dot" data-accent="#34d399" data-dark="#059669" style="background:#34d399;"></div>
-            <div class="accent-dot" data-accent="#60a5fa" data-dark="#2563eb" style="background:#60a5fa;"></div>
-            <div class="accent-dot" data-accent="#fbbf24" data-dark="#d97706" style="background:#fbbf24;"></div>
-            <div class="accent-dot" data-accent="#f87171" data-dark="#dc2626" style="background:#f87171;"></div>
+          <button class="btn-more">···</button>
+        </li>
+        <li class="playlist-item">
+          <div class="playlist-cover">🎵</div>
+          <div class="playlist-meta">
+            <span class="playlist-name">Morning Vibes</span>
+            <span class="playlist-count">15 titres</span>
           </div>
+          <button class="btn-more">···</button>
+        </li>
+        <li class="playlist-item">
+          <div class="playlist-cover">🎵</div>
+          <div class="playlist-meta">
+            <span class="playlist-name">Workout 🔥</span>
+            <span class="playlist-count">31 titres</span>
+          </div>
+          <button class="btn-more">···</button>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ─── STATS ─── -->
+    <section id="screen-stats" class="screen">
+      <div class="screen-header">
+        <h1 class="screen-title">Statistiques</h1>
+      </div>
+
+      <div class="section-block">
+        <div class="calendar-header">
+          <button class="cal-nav">‹</button>
+          <span class="cal-title">MARS 2026</span>
+          <button class="cal-nav">›</button>
+        </div>
+        <div class="calendar-grid">
+          <div class="cal-day-name">Lu</div><div class="cal-day-name">Ma</div><div class="cal-day-name">Me</div><div class="cal-day-name">Je</div><div class="cal-day-name">Ve</div><div class="cal-day-name">Sa</div><div class="cal-day-name">Di</div>
+          <div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="0"></div><div class="cal-day" data-intensity="1">1</div>
+          <div class="cal-day" data-intensity="1">2</div><div class="cal-day" data-intensity="1">3</div><div class="cal-day" data-intensity="2">4</div><div class="cal-day" data-intensity="2">5</div><div class="cal-day" data-intensity="1">6</div><div class="cal-day" data-intensity="0">7</div><div class="cal-day" data-intensity="0">8</div>
+          <div class="cal-day" data-intensity="2">9</div><div class="cal-day" data-intensity="2">10</div><div class="cal-day cal-today" data-intensity="3">11</div><div class="cal-day" data-intensity="0">12</div><div class="cal-day" data-intensity="0">13</div><div class="cal-day" data-intensity="0">14</div><div class="cal-day" data-intensity="0">15</div>
         </div>
       </div>
-      <div class="settings-section">
-        <div class="settings-label">Ensemble</div>
-        <div class="settings-item" id="settings-quality">
-          <div class="settings-icon">📶</div>
-          <div class="settings-text">Qualité stream</div>
-          <div class="settings-value" id="quality-value">Auto</div>
-          <div class="settings-arrow">›</div>
+
+      <div class="section-block">
+        <div class="tabs-row">
+          <button class="tab-btn active">Titres</button>
+          <button class="tab-btn">Artistes</button>
+          <button class="tab-btn">Albums</button>
         </div>
+        <h2 class="section-title">TOP 200</h2>
+        <ol class="top-list">
+          <li class="top-item"><span class="rank">#1</span><div class="track-meta"><span class="track-name">Blinding Lights</span><span class="track-artist">The Weeknd · 47 écoutes</span></div></li>
+          <li class="top-item"><span class="rank">#2</span><div class="track-meta"><span class="track-name">Starboy</span><span class="track-artist">The Weeknd · 38 écoutes</span></div></li>
+          <li class="top-item"><span class="rank">#3</span><div class="track-meta"><span class="track-name">River</span><span class="track-artist">Eminem · 29 écoutes</span></div></li>
+        </ol>
       </div>
-      <div class="settings-section">
-        <div class="settings-label">Style</div>
-        <div class="settings-item" id="settings-style">
-          <div class="settings-icon">🎨</div>
-          <div class="settings-text">Centre de style</div>
-          <div class="settings-value" id="current-style-name">GAGNOTE</div>
-          <div class="settings-arrow">›</div>
-        </div>
+
+      <div class="section-block">
+        <h2 class="section-title">Détails ◈</h2>
+        <ul class="details-list">
+          <li>🏃 Marathons : <strong>3 sessions 2h+</strong></li>
+          <li>🕐 Heures de pointe : <strong>22h–0h</strong></li>
+          <li>❤️ Artiste fidèle : <strong>The Weeknd</strong></li>
+          <li>⏩ Titres skippés : <strong>12</strong></li>
+          <li>🌍 Langues : <strong>FR 45% / EN 55%</strong></li>
+        </ul>
       </div>
-      <div class="settings-section">
-        <div class="settings-label">À propos</div>
-        <div class="settings-item">
-          <div class="settings-icon">ℹ</div>
-          <div class="settings-text">Version</div>
-          <div class="settings-value">3.0</div>
-        </div>
-        <div class="settings-item">
-          <div class="settings-icon">👨‍💻</div>
-          <div class="settings-text">Développeur</div>
-          <div class="settings-value">Cardi</div>
-        </div>
+    </section>
+
+    <!-- ─── ENSEMBLE ─── -->
+    <section id="screen-ensemble" class="screen">
+      <div class="screen-header">
+        <h1 class="screen-title">🎧 Ensemble</h1>
+      </div>
+      <div class="ensemble-pending">
+        <div class="pending-icon">🎧</div>
+        <p>Mode collaboratif</p>
+        <span>Design — PENDING</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       MINI-LECTEUR
+  ═══════════════════════════════════════════ -->
+  <div id="mini-player" class="mini-player" id="btn-open-player">
+    <div class="mini-progress"><div class="mini-progress-bar" style="width: 43%"></div></div>
+    <div class="mini-content">
+      <div class="cover-thumb cover-thumb--sm">🎵</div>
+      <div class="mini-info">
+        <span class="track-name">River</span>
+        <span class="track-artist">Eminem ft. Ed Sheeran</span>
+      </div>
+      <div class="mini-controls">
+        <button class="ctrl-btn">⏮</button>
+        <button class="ctrl-btn ctrl-btn--play">⏸</button>
+        <button class="ctrl-btn">⏭</button>
       </div>
     </div>
   </div>
 
-  <!-- ═══════════════════ CENTRE DE STYLE ═══════════════════ -->
-  <div id="style-screen">
-    <div class="overlay-header">
-      <button class="back-btn" id="back-style">‹</button>
-      <div class="overlay-title">Centre de style</div>
+  <!-- ═══════════════════════════════════════════
+       NAVIGATION BAS
+  ═══════════════════════════════════════════ -->
+  <nav id="app-nav">
+    <button class="nav-btn active" data-screen="home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>HOME</span>
+    </button>
+    <button class="nav-btn" data-screen="library">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>BIBLIO</span>
+    </button>
+    <button class="nav-btn" data-screen="artists">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>ART.</span>
+    </button>
+    <button class="nav-btn" data-screen="playlists">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>PLAY</span>
+    </button>
+    <button class="nav-btn" data-screen="stats">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>STATS</span>
+    </button>
+    <button class="nav-btn" data-screen="ensemble">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+      <span>ENS.</span>
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       LECTEUR PLEIN ÉCRAN
+  ═══════════════════════════════════════════ -->
+  <div id="player-fullscreen" class="player-fullscreen hidden">
+    <div class="player-bg">
+      <div class="player-bg-cover">🎵</div>
+      <div class="player-bg-overlay"></div>
     </div>
-    <div class="style-grid" id="style-grid">
-      <div class="style-card selected" data-style="GAGNOTE" data-bg="#0a0a0f" data-accent="#c084fc" data-dark="#7c3aed">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#1a0d2e,#0f0a1e);"></div>
-        <div class="style-card-content"><div class="style-card-name">GAGNOTE</div><div class="style-card-sub">Mode normal</div></div>
+
+    <!-- Carrousel -->
+    <div class="player-carousel" id="player-carousel">
+
+      <!-- Vue INFOS -->
+      <div class="player-view" id="view-infos">
+        <div class="player-topbar">
+          <button class="btn-close-player" id="btn-close-player">⌄</button>
+          <div class="player-title-block">
+            <span class="player-track">River</span>
+            <span class="player-artist">Eminem ft. Ed Sheeran</span>
+          </div>
+          <button class="btn-more-player">···</button>
+        </div>
+        <div class="infos-content">
+          <div class="info-row"><span class="info-label">Album</span><span class="info-val">Revival</span></div>
+          <div class="info-row"><span class="info-label">Année</span><span class="info-val">2017</span></div>
+          <div class="info-row"><span class="info-label">Genre</span><span class="info-val">Hip-Hop / Rap</span></div>
+          <div class="info-row"><span class="info-label">Écoutes</span><span class="info-val">29</span></div>
+        </div>
       </div>
-      <div class="style-card" data-style="CHAOS BORN" data-bg="#0d0005" data-accent="#e879f9" data-dark="#a21caf">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#2d0038,#1a0020,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">CHAOS BORN</div><div class="style-card-sub">Lady Gaga</div></div>
+
+      <!-- Vue LECTEUR (centre) -->
+      <div class="player-view player-view--main active-view" id="view-main">
+        <div class="player-topbar">
+          <button class="btn-close-player" id="btn-close-player2">⌄</button>
+          <div class="player-title-block">
+            <span class="player-track">River</span>
+            <span class="player-artist">Eminem ft. Ed Sheeran</span>
+          </div>
+          <button class="btn-more-player">···</button>
+        </div>
+
+        <div class="player-cover-area">
+          <div class="player-cover">🎵</div>
+        </div>
+
+        <div class="lyrics-preview">
+          <p class="lyrics-line">"Lose yourself in the music"</p>
+          <p class="lyrics-line lyrics-line--active">"the moment you own it"</p>
+        </div>
+
+        <div class="player-dots">
+          <span class="dot" data-view="infos"></span>
+          <span class="dot dot--active" data-view="main"></span>
+          <span class="dot" data-view="lyrics"></span>
+        </div>
+
+        <div class="player-actions">
+          <button class="action-btn">♡</button>
+          <button class="action-btn">⊕</button>
+          <button class="action-btn">···</button>
+        </div>
+
+        <div class="player-progress-wrap">
+          <div class="player-progress">
+            <div class="player-progress-bar" style="width: 43%">
+              <div class="player-progress-thumb"></div>
+            </div>
+          </div>
+          <div class="player-times">
+            <span>2:34</span>
+            <span>5:51</span>
+          </div>
+        </div>
+
+        <div class="player-controls">
+          <button class="ctrl-skip">«10s</button>
+          <button class="ctrl-btn ctrl-btn--shuffle">⇄</button>
+          <button class="ctrl-btn">⏮</button>
+          <button class="ctrl-btn ctrl-btn--play-lg">⏸</button>
+          <button class="ctrl-btn">⏭</button>
+          <button class="ctrl-btn ctrl-btn--queue">≋</button>
+          <button class="ctrl-skip">10s»</button>
+        </div>
+
+        <div class="player-volume">
+          <div class="volume-bar">
+            <div class="volume-fill" style="width: 70%"></div>
+          </div>
+        </div>
       </div>
-      <div class="style-card" data-style="VIPER SHOW" data-bg="#050a05" data-accent="#34d399" data-dark="#059669">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#0a1f0a,#111,#050505);"></div>
-        <div class="style-card-content"><div class="style-card-name">VIPER SHOW</div><div class="style-card-sub">Taylor Swift</div></div>
+
+      <!-- Vue PAROLES -->
+      <div class="player-view" id="view-lyrics">
+        <div class="player-topbar">
+          <button class="btn-close-player">⌄</button>
+          <div class="player-title-block">
+            <span class="player-track">RIVER - EMINEM</span>
+          </div>
+          <div class="lyrics-tools">
+            <button class="lyrics-tool-btn">🎛</button>
+            <button class="lyrics-tool-btn">🎚</button>
+            <button class="lyrics-tool-btn">🌐</button>
+          </div>
+        </div>
+        <div class="lyrics-scroll">
+          <p class="lrc-line">Look, if you had one shot</p>
+          <p class="lrc-line">one opportunity</p>
+          <p class="lrc-line lrc-active">To seize everything you ever wanted, one moment</p>
+          <p class="lrc-line">Would you capture it?</p>
+          <p class="lrc-line">Or just let it slip?</p>
+          <p class="lrc-line">His palms are sweaty</p>
+          <p class="lrc-line">Knees weak, arms are heavy</p>
+        </div>
+        <div class="lyrics-controls">
+          <button class="lrc-ctrl">← -0.5s</button>
+          <button class="lrc-ctrl lrc-ctrl--auto">✦ auto</button>
+          <button class="lrc-ctrl">+0.5s →</button>
+        </div>
+        <div class="lyrics-size">
+          <button class="lrc-size">A-</button>
+          <button class="lrc-size lrc-size--active">A</button>
+          <button class="lrc-size">A+</button>
+        </div>
+        <div class="player-dots">
+          <span class="dot" data-view="infos"></span>
+          <span class="dot" data-view="main"></span>
+          <span class="dot dot--active" data-view="lyrics"></span>
+        </div>
       </div>
-      <div class="style-card" data-style="CRIMSON REIGN" data-bg="#0f0000" data-accent="#f87171" data-dark="#dc2626">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#3b0000,#1a0000,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">CRIMSON REIGN</div><div class="style-card-sub">Rihanna</div></div>
+
+    </div><!-- /carousel -->
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       PANNEAU RÉGLAGES
+  ═══════════════════════════════════════════ -->
+  <div id="panel-settings" class="side-panel hidden">
+    <div class="side-panel-header">
+      <button class="btn-back">←</button>
+      <h2>Réglages</h2>
+    </div>
+    <div class="settings-section">
+      <h3 class="settings-group-title">Apparence</h3>
+      <div class="settings-row">
+        <span>🌗 Thème</span>
+        <select class="settings-select"><option>Sombre</option><option>Clair</option></select>
       </div>
-      <div class="style-card" data-style="CYBER NOVA" data-bg="#000510" data-accent="#22d3ee" data-dark="#0e7490">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#001a2e,#000b1a,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">CYBER NOVA</div><div class="style-card-sub">Lisa</div></div>
+      <div class="settings-row">
+        <span>🎨 Style</span>
+        <select class="settings-select" id="style-select">
+          <option value="gagnote">GAGNOTE</option>
+          <option value="chaos">CHAOS BORN</option>
+          <option value="viper">VIPER SHOW</option>
+          <option value="crimson">CRIMSON REIGN</option>
+          <option value="cyber">CYBER NOVA</option>
+          <option value="pink">PINK CRUSH</option>
+          <option value="velvet">VELVET CLOUD</option>
+          <option value="redvelvet">RED VELVET</option>
+          <option value="slay">SLAY BITCH</option>
+          <option value="solar">SOLAR CROWN</option>
+          <option value="solara">SOLARA</option>
+        </select>
       </div>
-      <div class="style-card" data-style="PINK CRUSH" data-bg="#0a0005" data-accent="#f472b6" data-dark="#be185d">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#2d0020,#1a000f,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">PINK CRUSH</div><div class="style-card-sub">BLACKPINK</div></div>
-      </div>
-      <div class="style-card" data-style="VELVET CLOUD" data-bg="#05000a" data-accent="#c4b5fd" data-dark="#7c3aed">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#1a0a2e,#0d0518,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">VELVET CLOUD</div><div class="style-card-sub">Ariana Grande</div></div>
-      </div>
-      <div class="style-card" data-style="RED VELVET" data-bg="#0a0003" data-accent="#fb7185" data-dark="#e11d48">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#2d0010,#1a0008,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">RED VELVET</div><div class="style-card-sub">Jennie</div></div>
-      </div>
-      <div class="style-card" data-style="SLAY BITCH" data-bg="#050005" data-accent="#a78bfa" data-dark="#6d28d9">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#1a0030,#0a0018,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">SLAY BITCH</div><div class="style-card-sub">Nicki Minaj</div></div>
-      </div>
-      <div class="style-card" data-style="SOLAR CROWN" data-bg="#0a0700" data-accent="#fbbf24" data-dark="#d97706">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#2d1f00,#1a1000,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">SOLAR CROWN</div><div class="style-card-sub">Beyoncé</div></div>
-      </div>
-      <div class="style-card" data-style="SOLARA" data-bg="#00050a" data-accent="#38bdf8" data-dark="#0284c7">
-        <div class="style-card-bg" style="background:linear-gradient(135deg,#00152d,#000a18,#000);"></div>
-        <div class="style-card-content"><div class="style-card-name">SOLARA</div><div class="style-card-sub">Aya Nakamura</div></div>
-      </div>
+    </div>
+    <div class="settings-section">
+      <h3 class="settings-group-title">Métadonnées</h3>
+      <button class="btn-metadata">🖼 Récupérer métadonnées manquantes ▶</button>
     </div>
   </div>
 
-  <!-- ═══════════════════ MENU CONTEXTUEL ═══════════════════ -->
-  <div id="context-menu" class="hidden">
-    <div id="context-menu-list"></div>
-  </div>
-  <div id="overlay-bg" class="hidden"></div>
-
-  <!-- ═══════════════════ TOAST ═══════════════════ -->
-  <div id="toast"></div>
-
-  <!-- ═══════════════════ PROGRESSION COVERS ═══════════════════ -->
-  <div id="cover-progress-panel" class="hidden">
-    <div class="cover-progress-header">
-      <div class="cover-progress-title">🖼 Récupération des métadonnées</div>
-      <button id="cover-progress-stop" onclick="Library.hideCoverProgress()">✕</button>
-    </div>
-    <div class="cover-progress-track">
-      <div class="cover-progress-fill" id="cover-progress-fill"></div>
-    </div>
-    <div class="cover-progress-bottom">
-      <div class="cover-progress-name" id="cover-progress-name">⟳ Démarrage...</div>
-      <div class="cover-progress-count" id="cover-progress-count">0 / 0</div>
-    </div>
-  </div>
-
-</div><!-- /app -->
-
-<!-- SCRIPTS (ordre important) -->
-<script src="player.js"></script>
-<script src="lyrics.js"></script>
-<script src="stats.js"></script>
-<script src="ensemble.js"></script>
-<script src="library.js"></script>
-<script src="app.js"></script>
-
+  <!-- jsmediatags : lecture des tags ID3 (MP3/M4A) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+  <script src="app.js"></script>
+  <script src="player.js"></script>
 </body>
 </html>

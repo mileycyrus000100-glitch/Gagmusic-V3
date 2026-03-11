@@ -1,802 +1,811 @@
 /* ═══════════════════════════════════════════════════════
    GAGMUSIC v3 — player.js
-   Lecture audio, file d'attente, progression, contrôles
-   ═══════════════════════════════════════════════════════ */
-
-const Player = {
-
-  /* ─── ÉTAT ─── */
-  audio:        null,   // HTMLAudioElement
-  currentSong:  null,   // chanson en cours
-  queue:        [],     // file d'attente
-  queueIndex:   0,      // position dans la file
-  isPlaying:    false,
-  isShuffle:    false,
-  isRepeat:     false,  // false | 'one' | 'all'
-  playTimer:    null,   // timer comptage 30s
-  playSeconds:  0,      // secondes écoutées (pour comptage)
-  progressTimer: null,  // timer mise à jour progression
-  inactiveTimer: null,  // timer mode inactif lecteur
-  isInactive:   false,  // mode inactif (contrôles cachés)
-  volumeBoost:  1.0,    // multiplicateur volume (1–4)
-
-  /* ─── INIT ─── */
-  init() {
-    try {
-      this.audio = new Audio();
-      this.audio.preload = 'metadata';
-
-      this.bindAudioEvents();
-      this.initProgressBar();
-      this.initInactiveMode();
-      this.initVolumeBar();
-
-      console.log('[Player] Initialisé');
-    } catch (e) {
-      console.error('[Player] Erreur init:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     ÉVÉNEMENTS AUDIO
-     ═══════════════════════════════════════════════════════ */
-
-  bindAudioEvents() {
-    try {
-      if (!this.audio) return;
-
-      // Mise à jour progression
-      this.audio.addEventListener('timeupdate', () => {
-        try {
-          this.onTimeUpdate();
-        } catch (e) {}
-      });
-
-      // Chanson terminée
-      this.audio.addEventListener('ended', () => {
-        try {
-          this.onEnded();
-        } catch (e) {}
-      });
-
-      // Prêt à lire
-      this.audio.addEventListener('canplay', () => {
-        try {
-          this.onCanPlay();
-        } catch (e) {}
-      });
-
-      // Erreur audio
-      this.audio.addEventListener('error', (e) => {
-        try {
-          this.onError(e);
-        } catch (err) {}
-      });
-
-      // Mise en mémoire tampon
-      this.audio.addEventListener('waiting', () => {
-        try {
-          if (typeof showToast === 'function') showToast('⏳ Chargement...');
-        } catch (e) {}
-      });
-
-    } catch (e) {
-      console.error('[Player] Erreur bindAudioEvents:', e);
-    }
-  },
-
-  onTimeUpdate() {
-    try {
-      if (!this.audio || !this.currentSong) return;
-
-      const current = this.audio.currentTime;
-      const total   = this.audio.duration || this.currentSong.duration || 0;
-
-      // Mise à jour UI
-      if (typeof updateProgress === 'function') {
-        updateProgress(current, total);
-      }
-
-      // Comptage écoute (30 secondes)
-      this.playSeconds++;
-      if (this.playSeconds === 30) {
-        this.countPlay();
-      }
-
-      // Sauvegarder position pour "continuer"
-      if (Math.floor(current) % 5 === 0) {
-        this.savePosition(current, total);
-      }
-
-    } catch (e) {
-      console.error('[Player] Erreur onTimeUpdate:', e);
-    }
-  },
-
-  onEnded() {
-    try {
-      this.playSeconds = 0;
-
-      if (this.isRepeat === 'one') {
-        // Répéter la même chanson
-        this.audio.currentTime = 0;
-        this.audio.play().catch(e => console.warn('[Player] Erreur repeat:', e));
-        return;
-      }
-
-      // Passer à la suivante
-      this.next();
-
-    } catch (e) {
-      console.error('[Player] Erreur onEnded:', e);
-    }
-  },
-
-  onCanPlay() {
-    try {
-      // Mettre à jour durée totale si inconnue
-      if (this.currentSong && !this.currentSong.duration && this.audio.duration) {
-        this.currentSong.duration = this.audio.duration;
-      }
-    } catch (e) {}
-  },
-
-  onError(e) {
-    try {
-      console.warn('[Player] Erreur audio:', e);
-      if (typeof showToast === 'function') showToast('❌ Impossible de lire ce fichier');
-      // Essayer la suivante
-      setTimeout(() => this.next(), 1000);
-    } catch (err) {
-      console.error('[Player] Erreur onError:', err);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     LECTURE
-     ═══════════════════════════════════════════════════════ */
-
-  play(song, queue, index) {
-    try {
-      if (!song) return;
-
-      this.currentSong = song;
-      this.queue       = queue || [song];
-      this.queueIndex  = index || 0;
-      this.playSeconds = 0;
-
-      // Source audio
-      if (this.audio) {
-        this.audio.src  = song.path || '';
-        this.audio.load();
-
-        // Restaurer position si "continuer"
-        const saved = this.getSavedPosition(song.id);
-        if (saved && saved.current > 5 && saved.current < (song.duration || 9999) - 5) {
-          this.audio.currentTime = saved.current;
-        }
-
-        this.audio.play()
-          .then(() => {
-            this.isPlaying = true;
-            this.updatePlayUI();
-          })
-          .catch(e => {
-            console.warn('[Player] Erreur play:', e);
-            // Mode navigateur sans fichier audio réel
-            this.isPlaying = true;
-            this.updatePlayUI();
-            this.simulateProgress(song.duration || 180);
-          });
-      } else {
-        // Pas d'audio disponible (mode aperçu)
-        this.isPlaying = true;
-        this.updatePlayUI();
-      }
-
-      // Mettre à jour l'interface
-      this.updateSongUI(song);
-
-      // Sauvegarder comme dernière chanson
-      try {
-        localStorage.setItem('gag_last_song', JSON.stringify({
-          id:       song.id,
-          title:    song.title,
-          artist:   song.artist,
-          album:    song.album,
-          cover:    song.cover,
-          duration: song.duration,
-          progress: 0,
-        }));
-      } catch (e) {}
-
-      // Réinitialiser le timer inactif
-      this.resetInactiveTimer();
-
-      // Mettre à jour paroles si module disponible
-      if (typeof Lyrics !== 'undefined' && Lyrics.load) {
-        Lyrics.load(song);
-      }
-
-      console.log('[Player] Lecture:', song.title || '—');
-
-    } catch (e) {
-      console.error('[Player] Erreur play:', e);
-    }
-  },
-
-  togglePlay() {
-    try {
-      if (this.isPlaying) {
-        this.pause();
-      } else {
-        this.resume();
-      }
-    } catch (e) {
-      console.error('[Player] Erreur togglePlay:', e);
-    }
-  },
-
-  pause() {
-    try {
-      if (this.audio) this.audio.pause();
-      this.isPlaying = false;
-      this.updatePlayUI();
-      clearInterval(this.progressTimer);
-      const vinyl = document.getElementById('vinyl');
-      if (vinyl) vinyl.style.animationPlayState = 'paused';
-    } catch (e) {
-      console.error('[Player] Erreur pause:', e);
-    }
-  },
-
-  resume() {
-    try {
-      if (this.audio && this.audio.src) {
-        this.audio.play().catch(e => console.warn('[Player] Erreur resume:', e));
-      }
-      this.isPlaying = true;
-      this.updatePlayUI();
-      const vinyl = document.getElementById('vinyl');
-      if (vinyl) vinyl.style.animationPlayState = 'running';
-    } catch (e) {
-      console.error('[Player] Erreur resume:', e);
-    }
-  },
-
-  prev() {
-    try {
-      // Si plus de 3 secondes écoulées → revenir au début
-      if (this.audio && this.audio.currentTime > 3) {
-        this.audio.currentTime = 0;
-        this.playSeconds = 0;
-        return;
-      }
-
-      if (this.queue.length === 0) return;
-
-      if (this.isShuffle) {
-        this.queueIndex = Math.floor(Math.random() * this.queue.length);
-      } else {
-        this.queueIndex = this.queueIndex > 0
-          ? this.queueIndex - 1
-          : (this.isRepeat === 'all' ? this.queue.length - 1 : 0);
-      }
-
-      this.play(this.queue[this.queueIndex], this.queue, this.queueIndex);
-
-    } catch (e) {
-      console.error('[Player] Erreur prev:', e);
-    }
-  },
-
-  next() {
-    try {
-      if (this.queue.length === 0) return;
-
-      if (this.isShuffle) {
-        // Aléatoire mais pas la même chanson
-        let newIdx;
-        do {
-          newIdx = Math.floor(Math.random() * this.queue.length);
-        } while (newIdx === this.queueIndex && this.queue.length > 1);
-        this.queueIndex = newIdx;
-      } else {
-        this.queueIndex++;
-        if (this.queueIndex >= this.queue.length) {
-          if (this.isRepeat === 'all') {
-            this.queueIndex = 0;
-          } else {
-            // Fin de la file
-            this.queueIndex = this.queue.length - 1;
-            this.pause();
-            return;
-          }
-        }
-      }
-
-      this.play(this.queue[this.queueIndex], this.queue, this.queueIndex);
-
-    } catch (e) {
-      console.error('[Player] Erreur next:', e);
-    }
-  },
-
-  seek(seconds) {
-    try {
-      if (this.audio) {
-        this.audio.currentTime = Math.max(0, Math.min(seconds, this.audio.duration || 0));
-      }
-    } catch (e) {
-      console.error('[Player] Erreur seek:', e);
-    }
-  },
-
-  seekRelative(delta) {
-    try {
-      if (this.audio) {
-        this.seek(this.audio.currentTime + delta);
-      }
-    } catch (e) {
-      console.error('[Player] Erreur seekRelative:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     BARRE DE PROGRESSION (clic)
-     ═══════════════════════════════════════════════════════ */
-
-  initProgressBar() {
-    try {
-      const bar = document.getElementById('player-progress');
-      if (!bar) return;
-
-      bar.addEventListener('click', (e) => {
-        try {
-          const rect = bar.getBoundingClientRect();
-          const pct  = (e.clientX - rect.left) / rect.width;
-          const total = (this.audio && this.audio.duration) || (this.currentSong && this.currentSong.duration) || 0;
-          if (total > 0) this.seek(pct * total);
-        } catch (err) {
-          console.warn('[Player] Erreur seek click:', err);
-        }
-      });
-
-      // Boutons skip ±10s
-      const btnRewind  = document.getElementById('btn-rewind');
-      const btnForward = document.getElementById('btn-forward');
-      if (btnRewind)  btnRewind.addEventListener('click',  () => this.seekRelative(-10));
-      if (btnForward) btnForward.addEventListener('click', () => this.seekRelative(10));
-
-    } catch (e) {
-      console.error('[Player] Erreur initProgressBar:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     MODE INACTIF (10s sans interaction)
-     ═══════════════════════════════════════════════════════ */
-
-  initInactiveMode() {
-    try {
-      const screen = document.getElementById('player-screen');
-      if (!screen) return;
-
-      // Toute interaction → réactiver
-      ['touchstart', 'click'].forEach(evt => {
-        screen.addEventListener(evt, () => {
-          try {
-            if (this.isInactive) this.setActive();
-            this.resetInactiveTimer();
-          } catch (e) {}
-        }, { passive: true });
-      });
-
-    } catch (e) {
-      console.error('[Player] Erreur initInactiveMode:', e);
-    }
-  },
-
-  resetInactiveTimer() {
-    try {
-      clearTimeout(this.inactiveTimer);
-      this.inactiveTimer = setTimeout(() => {
-        this.setInactive();
-      }, 10000);
-    } catch (e) {}
-  },
-
-  setInactive() {
-    try {
-      this.isInactive = true;
-      const content = document.getElementById('player-content');
-      if (content) content.style.opacity = '0';
-      // Afficher seulement titre + paroles en bas
-      const header = document.getElementById('player-header');
-      if (header) header.style.opacity = '0.6';
-    } catch (e) {}
-  },
-
-  setActive() {
-    try {
-      this.isInactive = false;
-      const content = document.getElementById('player-content');
-      if (content) content.style.opacity = '1';
-      const header = document.getElementById('player-header');
-      if (header) header.style.opacity = '1';
-    } catch (e) {}
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     BARRE VOLUME
-     ═══════════════════════════════════════════════════════ */
-
-  initVolumeBar() {
-    try {
-      let volumeHideTimer = null;
-
-      const showVolumeBar = (pct) => {
-        const wrap    = document.getElementById('volume-bar-wrap');
-        const fill    = document.getElementById('volume-bar-fill');
-        const pctEl   = document.getElementById('volume-pct');
-        if (!wrap) return;
-
-        // Afficher
-        wrap.classList.remove('hidden');
-        wrap.style.opacity = '1';
-
-        // Hauteur et couleur selon le niveau
-        const height = Math.min(100, (pct / 4) * 100); // 400% = 100% hauteur
-        if (fill) {
-          fill.style.height = height + '%';
-          if      (pct <= 1.0) fill.style.background = 'white';
-          else if (pct <= 2.0) fill.style.background = '#fbbf24'; // or
-          else if (pct <= 3.0) fill.style.background = '#f97316'; // orange
-          else                 fill.style.background = '#ef4444'; // rouge
-        }
-
-        // Afficher le pourcentage
-        if (pctEl) pctEl.textContent = Math.round(pct * 100) + '%';
-
-        // Masquer après 2.5s
-        clearTimeout(volumeHideTimer);
-        volumeHideTimer = setTimeout(() => {
-          if (wrap) {
-            wrap.style.opacity = '0';
-            setTimeout(() => wrap.classList.add('hidden'), 300);
-          }
-        }, 2500);
-      };
-
-      // Écouter les changements de volume de l'audio natif
-      if (this.audio) {
-        this.audio.addEventListener('volumechange', () => {
-          showVolumeBar(this.volumeBoost);
-        });
-      }
-
-      // Exposer pour Android
-      window.onVolumeChange = (pct) => {
-        this.volumeBoost = pct;
-        showVolumeBar(pct);
-      };
-
-    } catch (e) {
-      console.warn('[Player] initVolumeBar:', e);
-    }
-  },
-
-  setVolumeBoost(multiplier) {
-    try {
-      // Clamp entre 1 et 4 (100% à 400%)
-      this.volumeBoost = Math.max(1, Math.min(4, multiplier));
-
-      if (this.audio) {
-        // WebAudio pour boost > 1.0
-        if (this.volumeBoost > 1 && !this.audioContext) {
-          this.setupAudioContext();
-        }
-        if (this.gainNode) {
-          this.gainNode.gain.value = this.volumeBoost;
-        }
-      }
-
-      // Avertissement à >100%
-      if (this.volumeBoost > 1 && !this._warnedBoost) {
-        this._warnedBoost = true;
-        if (typeof showToast === 'function') {
-          showToast('⚠️ Volume amplifié — risque pour l\'audition');
-        }
-      }
-
-    } catch (e) {
-      console.error('[Player] Erreur setVolumeBoost:', e);
-    }
-  },
-
-  setupAudioContext() {
-    try {
-      if (!this.audio) return;
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const source      = this.audioContext.createMediaElementSource(this.audio);
-      this.gainNode     = this.audioContext.createGain();
-      source.connect(this.gainNode);
-      this.gainNode.connect(this.audioContext.destination);
-      this.gainNode.gain.value = this.volumeBoost;
-    } catch (e) {
-      console.warn('[Player] WebAudio non disponible:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     SHUFFLE + REPEAT
-     ═══════════════════════════════════════════════════════ */
-
-  toggleShuffle() {
-    try {
-      this.isShuffle = !this.isShuffle;
-      const btn = document.getElementById('btn-shuffle');
-      if (btn) btn.classList.toggle('active', this.isShuffle);
-      if (typeof showToast === 'function') {
-        showToast(this.isShuffle ? '🔀 Aléatoire activé' : 'Aléatoire désactivé');
-      }
-    } catch (e) {
-      console.error('[Player] Erreur toggleShuffle:', e);
-    }
-  },
-
-  toggleRepeat() {
-    try {
-      if (!this.isRepeat)       this.isRepeat = 'all';
-      else if (this.isRepeat === 'all') this.isRepeat = 'one';
-      else                      this.isRepeat = false;
-
-      const btn = document.getElementById('btn-repeat');
-      if (btn) {
-        btn.classList.toggle('active', !!this.isRepeat);
-        btn.textContent = this.isRepeat === 'one' ? '🔂' : '🔁';
-      }
-
-      const labels = { all: '🔁 Répéter tout', one: '🔂 Répéter une fois', false: 'Répétition désactivée' };
-      if (typeof showToast === 'function') showToast(labels[String(this.isRepeat)]);
-    } catch (e) {
-      console.error('[Player] Erreur toggleRepeat:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     COMPTAGE ÉCOUTES
-     ═══════════════════════════════════════════════════════ */
-
-  countPlay() {
-    try {
-      if (!this.currentSong || !this.currentSong.id) return;
-
-      const id  = this.currentSong.id;
-      const now = Date.now();
-
-      if (!Library || !Library.stats) return;
-      if (!Library.stats[id]) Library.stats[id] = { plays:0, history:[], weekPlays:0 };
-
-      Library.stats[id].plays++;
-      Library.stats[id].lastPlayed = now;
-      Library.stats[id].history    = Library.stats[id].history || [];
-      Library.stats[id].history.push({ ts: now });
-
-      // Garder max 1000 entrées historique par chanson
-      if (Library.stats[id].history.length > 1000) {
-        Library.stats[id].history = Library.stats[id].history.slice(-1000);
-      }
-
-      Library.saveToStorage();
-
-      console.log('[Player] Écoute comptée:', this.currentSong.title, '—', Library.stats[id].plays, 'fois');
-
-    } catch (e) {
-      console.error('[Player] Erreur countPlay:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     POSITION (continuer)
-     ═══════════════════════════════════════════════════════ */
-
-  savePosition(current, total) {
-    try {
-      if (!this.currentSong) return;
-      const data = {
-        id:       this.currentSong.id,
-        title:    this.currentSong.title,
-        artist:   this.currentSong.artist,
-        album:    this.currentSong.album,
-        cover:    this.currentSong.cover,
-        duration: total,
-        progress: current,
-      };
-      localStorage.setItem('gag_last_song', JSON.stringify(data));
-    } catch (e) {}
-  },
-
-  getSavedPosition(songId) {
-    try {
-      const raw = localStorage.getItem('gag_last_song');
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (data && data.id === songId) return data;
-      return null;
-    } catch (e) {
-      return null;
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     SIMULATION PROGRESSION (mode navigateur sans audio)
-     ═══════════════════════════════════════════════════════ */
-
-  simulateProgress(duration) {
-    try {
-      clearInterval(this.progressTimer);
-      let current = this.audio ? this.audio.currentTime : 0;
-      const total = duration || 180;
-
-      this.progressTimer = setInterval(() => {
-        try {
-          if (!this.isPlaying) return;
-          current += 1;
-          if (current >= total) {
-            clearInterval(this.progressTimer);
-            this.onEnded();
-            return;
-          }
-          if (typeof updateProgress === 'function') updateProgress(current, total);
-
-          // Comptage 30s
-          this.playSeconds++;
-          if (this.playSeconds === 30) this.countPlay();
-
-        } catch (e) {}
-      }, 1000);
-
-    } catch (e) {
-      console.error('[Player] Erreur simulateProgress:', e);
-    }
-  },
-
-  /* ═══════════════════════════════════════════════════════
-     MISE À JOUR UI
-     ═══════════════════════════════════════════════════════ */
-
-  updateSongUI(song) {
-    try {
-      if (!song) return;
-
-      // Mini lecteur
-      if (typeof updateMiniPlayer === 'function') updateMiniPlayer(song);
-
-      // Mini lecteur : afficher
-      const mini = document.getElementById('mini-player');
-      if (mini) mini.classList.remove('hidden');
-
-      // Lecteur plein écran
-      const titleEl  = document.getElementById('player-title');
-      const artistEl = document.getElementById('player-artist');
-      const artEl    = document.getElementById('player-art');
-
-      if (titleEl)  titleEl.textContent  = song.title  || '—';
-      if (artistEl) artistEl.textContent = song.artist || '—';
-
-      // Pochette
-      if (artEl) {
-        if (song.cover) {
-          artEl.innerHTML = `<img src="${song.cover}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
-        } else {
-          artEl.innerHTML = '🎵';
-        }
-      }
-
-      // Accueil : carte continuer
-      if (typeof Library !== 'undefined' && Library.updateContinueCard) {
-        Library.updateContinueCard(song);
-      }
-
-      // Mise à jour biblio (animation EQ)
-      if (typeof Library !== 'undefined' && Library.renderBiblio) {
-        Library.renderBiblio();
-      }
-
-    } catch (e) {
-      console.error('[Player] Erreur updateSongUI:', e);
-    }
-  },
-
-  updatePlayUI() {
-    try {
-      const icon     = this.isPlaying ? '⏸' : '▶';
-      const btnMain  = document.getElementById('btn-play-main');
-      const btnMini  = document.getElementById('mini-play');
-      const vinyl    = document.getElementById('vinyl');
-
-      if (btnMain) btnMain.textContent = icon;
-      if (btnMini) btnMini.textContent = icon;
-
-      if (vinyl) {
-        vinyl.style.animationPlayState = this.isPlaying ? 'running' : 'paused';
-      }
-
-      // Sync App.isPlaying
-      if (typeof App !== 'undefined') App.isPlaying = this.isPlaying;
-
-    } catch (e) {
-      console.error('[Player] Erreur updatePlayUI:', e);
-    }
-  },
-
-  /* Propriété alias currentIndex */
-  get currentIndex() { return this.queueIndex || 0; },
-
-  /* Ajouter une chanson à la fin de la file */
-  addToQueue(song) {
-    try {
-      if (!song) return;
-      // Si aucune file active, créer une file avec juste cette chanson
-      if (!this.queue || this.queue.length === 0) {
-        this.queue = [song];
-        this.queueIndex = 0;
-      } else {
-        this.queue.push(song);
-      }
-      if (typeof showToast === 'function') showToast('⊕ Ajouté à la file');
-      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
-    } catch (e) {
-      console.error('[Player] Erreur addToQueue:', e);
-    }
-  },
-
-  /* Insérer une chanson juste après la chanson actuelle */
-  addNext(song) {
-    try {
-      if (!song) return;
-      if (!this.queue || this.queue.length === 0) {
-        this.queue = [song];
-        this.queueIndex = 0;
-      } else {
-        // Insérer à queueIndex + 1
-        this.queue.splice(this.queueIndex + 1, 0, song);
-      }
-      if (typeof showToast === 'function') showToast('⏭ Lire ensuite');
-      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
-    } catch (e) {
-      console.error('[Player] Erreur addNext:', e);
-    }
-  },
-
-  /* Jouer par index dans la file */
-  playIndex(index) {
-    try {
-      if (!this.queue || index < 0 || index >= this.queue.length) return;
-      this.play(this.queue[index], this.queue, index);
-    } catch (e) {
-      console.error('[Player] Erreur playIndex:', e);
-    }
-  },
-
-  /* Retirer de la file */
-  removeFromQueue(index) {
-    try {
-      if (!this.queue || index < 0 || index >= this.queue.length) return;
-      if (index === this.queueIndex) {
-        if (typeof showToast === 'function') showToast('Impossible de retirer la chanson en cours');
-        return;
-      }
-      this.queue.splice(index, 1);
-      if (index < this.queueIndex) this.queueIndex--;
-      if (typeof refreshQueuePanel === 'function') refreshQueuePanel();
-    } catch (e) {
-      console.error('[Player] Erreur removeFromQueue:', e);
-    }
-  },
-
+   Lecteur audio Web (HTML5 Audio API)
+   Formats : MP3, M4A
+   Fonctions : lecture, pause, suivant/précédent,
+               barre de progression, volume, skip ±10s,
+               shuffle, repeat, import de fichiers
+═══════════════════════════════════════════════════════ */
+
+'use strict';
+
+// ─── ÉTAT DU LECTEUR ───────────────────────────────────
+const PlayerState = {
+  audio: new Audio(),
+  library: [],          // [{ id, title, artist, album, duration, src, cover }]
+  queue: [],            // indices dans library
+  queueIndex: -1,       // position actuelle dans la queue
+  isPlaying: false,
+  isShuffle: false,
+  repeatMode: 'none',   // 'none' | 'one' | 'all'
+  volume: 0.7,          // 0.0 → 1.0 (→ 400% = 4.0 via gain node)
+  gainValue: 0.7,
+  listenCount: 0,       // secondes écoutées sur le titre en cours
+  LISTEN_THRESHOLD: 30, // secondes avant de comptabiliser une écoute
 };
 
-/* Exposer Player globalement */
-window.Player = Player;
+// Web Audio API pour le volume > 100%
+let audioCtx, gainNode, sourceNode;
+
+// ─── INIT ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initAudioEngine();
+  injectImportButton();
+  bindControls();
+  bindProgressBar();
+  bindVolumeBar();
+  bindAudioEvents();
+  restoreLibrary();
+  updateUI();
+});
+
+// ═══════════════════════════════════════════════════════
+// MOTEUR AUDIO (Web Audio API pour gain > 1.0)
+// ═══════════════════════════════════════════════════════
+function initAudioEngine() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  sourceNode = audioCtx.createMediaElementSource(PlayerState.audio);
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = PlayerState.gainValue;
+  sourceNode.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  // Reprendre le contexte audio si suspendu (politique navigateur)
+  document.addEventListener('click', () => {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════════
+// IMPORT DE FICHIERS
+// ═══════════════════════════════════════════════════════
+function injectImportButton() {
+  // Bouton SCAN dans le header → ouvre l'input file
+  const btnScan = document.getElementById('btn-scan');
+  if (!btnScan) return;
+
+  // Créer l'input file caché
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.id = 'file-input';
+  input.accept = '.mp3,.m4a,audio/mpeg,audio/mp4';
+  input.multiple = true;
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  btnScan.addEventListener('click', () => {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    input.click();
+  });
+
+  input.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    importFiles(files);
+    input.value = ''; // reset pour permettre re-import du même fichier
+  });
+}
+
+async function importFiles(files) {
+  showToast(`Import de ${files.length} fichier(s)...`);
+
+  for (const file of files) {
+    if (!isValidAudio(file)) continue;
+    await processFile(file);
+  }
+
+  saveLibrary();
+  renderLibrary();
+  updateHomeScreen();
+  showToast(`✓ ${files.length} titre(s) importé(s)`);
+}
+
+function isValidAudio(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  return ['mp3', 'm4a'].includes(ext);
+}
+
+async function processFile(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const src = e.target.result;
+      const meta = await extractMetadata(file, src);
+
+      // Éviter les doublons (même nom de fichier)
+      const exists = PlayerState.library.find(t => t.filename === file.name);
+      if (exists) { resolve(); return; }
+
+      const track = {
+        id: Date.now() + Math.random(),
+        filename: file.name,
+        title: meta.title || cleanTitle(file.name),
+        artist: meta.artist || 'Artiste inconnu',
+        album: meta.album || 'Album inconnu',
+        year: meta.year || '',
+        genre: meta.genre || '',
+        duration: 0,      // rempli à la lecture
+        cover: meta.cover || null,
+        src,
+        listenCount: 0,
+        liked: false,
+        addedAt: Date.now(),
+        lastPlayed: null,
+      };
+
+      PlayerState.library.push(track);
+      resolve();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Extraction métadonnées ID3 basique ───────────────
+async function extractMetadata(file, src) {
+  // On utilise jsmediatags via CDN si disponible, sinon fallback
+  return new Promise((resolve) => {
+    if (window.jsmediatags) {
+      window.jsmediatags.read(file, {
+        onSuccess: (tag) => {
+          const t = tag.tags;
+          let cover = null;
+
+          if (t.picture) {
+            const { data, format } = t.picture;
+            const bytes = new Uint8Array(data);
+            const blob = new Blob([bytes], { type: format });
+            cover = URL.createObjectURL(blob);
+          }
+
+          resolve({
+            title: t.title || '',
+            artist: t.artist || '',
+            album: t.album || '',
+            year: t.year || '',
+            genre: t.genre || '',
+            cover,
+          });
+        },
+        onError: () => resolve({}),
+      });
+    } else {
+      // Fallback : pas de métadonnées ID3
+      resolve({});
+    }
+  });
+}
+
+// ─── Nettoyage du titre (spec GagMusic) ───────────────
+function cleanTitle(filename) {
+  let name = filename.replace(/\.[^.]+$/, ''); // enlever extension
+
+  // Mots bruités à supprimer
+  const noise = [
+    'official audio', 'official video', 'official mv', 'official clip',
+    'music video', 'lyric video', 'lyrics', 'paroles', 'visualizer',
+    'clean', 'radio edit', 'explicit', 'remastered', 'hd', 'hq', '4k',
+    'audio', 'video', '256k', '320k', '320kbps', 'flac', 'mp3',
+  ];
+
+  // Supprimer contenu entre () ou [] si c'est du bruit
+  name = name.replace(/\(([^)]+)\)/g, (match, inner) => {
+    const low = inner.toLowerCase();
+    if (noise.some(n => low.includes(n))) return '';
+    if (/^\d+k(bps)?$/i.test(inner.trim())) return '';
+    return match; // garder (feat. xxx)
+  });
+  name = name.replace(/\[([^\]]+)\]/g, (match, inner) => {
+    const low = inner.toLowerCase();
+    if (noise.some(n => low.includes(n))) return '';
+    return match;
+  });
+
+  // Supprimer les mots bruités restants
+  noise.forEach(n => {
+    const re = new RegExp(`\\b${n.replace(/ /g, '\\s+')}\\b`, 'gi');
+    name = name.replace(re, '');
+  });
+
+  return name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || filename;
+}
+
+// ═══════════════════════════════════════════════════════
+// LECTURE
+// ═══════════════════════════════════════════════════════
+function playTrack(indexInLibrary) {
+  if (indexInLibrary < 0 || indexInLibrary >= PlayerState.library.length) return;
+
+  const track = PlayerState.library[indexInLibrary];
+  PlayerState.queueIndex = indexInLibrary;
+  PlayerState.listenCount = 0;
+
+  // Charger la source
+  PlayerState.audio.src = track.src;
+  PlayerState.audio.load();
+  PlayerState.audio.play().then(() => {
+    PlayerState.isPlaying = true;
+    track.lastPlayed = Date.now();
+    updateUI();
+    updateMiniPlayer(track);
+    updateFullPlayer(track);
+    saveLibrary();
+  }).catch(err => {
+    console.error('Erreur lecture :', err);
+    showToast('❌ Impossible de lire ce fichier');
+  });
+}
+
+function togglePlayPause() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  if (PlayerState.library.length === 0) {
+    showToast('📂 Importez des fichiers d\'abord');
+    return;
+  }
+
+  if (PlayerState.queueIndex === -1) {
+    playTrack(0);
+    return;
+  }
+
+  if (PlayerState.isPlaying) {
+    PlayerState.audio.pause();
+    PlayerState.isPlaying = false;
+  } else {
+    PlayerState.audio.play();
+    PlayerState.isPlaying = true;
+  }
+  updatePlayPauseButtons();
+}
+
+function playNext() {
+  const lib = PlayerState.library;
+  if (!lib.length) return;
+
+  let next;
+  if (PlayerState.isShuffle) {
+    next = Math.floor(Math.random() * lib.length);
+  } else {
+    next = (PlayerState.queueIndex + 1) % lib.length;
+  }
+  playTrack(next);
+}
+
+function playPrev() {
+  const lib = PlayerState.library;
+  if (!lib.length) return;
+
+  // Si > 3s écoutées → retour au début du titre
+  if (PlayerState.audio.currentTime > 3) {
+    PlayerState.audio.currentTime = 0;
+    return;
+  }
+
+  let prev;
+  if (PlayerState.isShuffle) {
+    prev = Math.floor(Math.random() * lib.length);
+  } else {
+    prev = (PlayerState.queueIndex - 1 + lib.length) % lib.length;
+  }
+  playTrack(prev);
+}
+
+function skipForward() {
+  PlayerState.audio.currentTime = Math.min(
+    PlayerState.audio.currentTime + 10,
+    PlayerState.audio.duration || 0
+  );
+}
+
+function skipBackward() {
+  PlayerState.audio.currentTime = Math.max(
+    PlayerState.audio.currentTime - 10, 0
+  );
+}
+
+function toggleShuffle() {
+  PlayerState.isShuffle = !PlayerState.isShuffle;
+  const btn = document.querySelector('.ctrl-btn--shuffle');
+  if (btn) btn.style.color = PlayerState.isShuffle
+    ? 'var(--accent)' : 'var(--text2)';
+}
+
+function toggleRepeat() {
+  const modes = ['none', 'all', 'one'];
+  const idx = modes.indexOf(PlayerState.repeatMode);
+  PlayerState.repeatMode = modes[(idx + 1) % modes.length];
+
+  // Appliquer sur l'audio
+  PlayerState.audio.loop = (PlayerState.repeatMode === 'one');
+
+  const btn = document.querySelector('.ctrl-btn--repeat');
+  if (btn) {
+    const icons = { none: '↻', all: '🔁', one: '🔂' };
+    btn.textContent = icons[PlayerState.repeatMode];
+    btn.style.color = PlayerState.repeatMode !== 'none'
+      ? 'var(--accent)' : 'var(--text2)';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// ÉVÉNEMENTS AUDIO
+// ═══════════════════════════════════════════════════════
+function bindAudioEvents() {
+  const audio = PlayerState.audio;
+
+  // Mise à jour de la progression
+  audio.addEventListener('timeupdate', () => {
+    updateProgressBars();
+    trackListenTime();
+  });
+
+  // Durée connue
+  audio.addEventListener('loadedmetadata', () => {
+    const track = currentTrack();
+    if (track) track.duration = audio.duration;
+    updateTimeCodes();
+  });
+
+  // Fin de piste
+  audio.addEventListener('ended', () => {
+    PlayerState.isPlaying = false;
+    if (PlayerState.repeatMode === 'one') {
+      audio.play();
+      PlayerState.isPlaying = true;
+    } else if (PlayerState.repeatMode === 'all' || PlayerState.isShuffle) {
+      playNext();
+    } else if (PlayerState.queueIndex < PlayerState.library.length - 1) {
+      playNext();
+    } else {
+      updatePlayPauseButtons();
+    }
+  });
+
+  // Erreur
+  audio.addEventListener('error', () => {
+    showToast('❌ Erreur de lecture');
+    PlayerState.isPlaying = false;
+    updatePlayPauseButtons();
+  });
+
+  // Play / Pause natifs
+  audio.addEventListener('play',  () => { PlayerState.isPlaying = true;  updatePlayPauseButtons(); });
+  audio.addEventListener('pause', () => { PlayerState.isPlaying = false; updatePlayPauseButtons(); });
+}
+
+function trackListenTime() {
+  // Comptabiliser une écoute après 30s
+  if (PlayerState.isPlaying) {
+    PlayerState.listenCount += 0.25; // timeupdate ≈ toutes les 250ms
+    if (PlayerState.listenCount >= PlayerState.LISTEN_THRESHOLD) {
+      const track = currentTrack();
+      if (track && PlayerState.listenCount < PlayerState.LISTEN_THRESHOLD + 0.5) {
+        track.listenCount = (track.listenCount || 0) + 1;
+        saveLibrary();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CONTRÔLES UI
+// ═══════════════════════════════════════════════════════
+function bindControls() {
+  // Mini-lecteur boutons (ne pas propager le click au conteneur)
+  safeClick('.mini-controls .ctrl-btn:nth-child(1)', (e) => { e.stopPropagation(); playPrev(); });
+  safeClick('.mini-controls .ctrl-btn--play',        (e) => { e.stopPropagation(); togglePlayPause(); });
+  safeClick('.mini-controls .ctrl-btn:nth-child(3)', (e) => { e.stopPropagation(); playNext(); });
+
+  // Lecteur plein écran
+  safeClick('.ctrl-skip:first-of-type', () => skipBackward());
+  safeClick('.ctrl-skip:last-of-type',  () => skipForward());
+  safeClick('.ctrl-btn--shuffle',       () => toggleShuffle());
+  safeClick('.ctrl-btn--play-lg',       () => togglePlayPause());
+
+  // Précédent / Suivant dans le lecteur plein écran
+  const fullControls = document.querySelector('.player-controls');
+  if (fullControls) {
+    const btns = fullControls.querySelectorAll('.ctrl-btn:not(.ctrl-btn--shuffle):not(.ctrl-btn--play-lg):not(.ctrl-btn--queue)');
+    if (btns[0]) btns[0].addEventListener('click', playPrev);
+    if (btns[1]) btns[1].addEventListener('click', playNext);
+  }
+}
+
+function safeClick(selector, handler) {
+  const el = document.querySelector(selector);
+  if (el) el.addEventListener('click', handler);
+}
+
+// ═══════════════════════════════════════════════════════
+// BARRE DE PROGRESSION
+// ═══════════════════════════════════════════════════════
+function bindProgressBar() {
+  const progressEl = document.querySelector('.player-progress');
+  if (!progressEl) return;
+
+  let isDragging = false;
+
+  function seek(e) {
+    const rect = progressEl.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - rect.left;
+    const ratio = Math.max(0, Math.min(1, x / rect.width));
+    if (PlayerState.audio.duration) {
+      PlayerState.audio.currentTime = ratio * PlayerState.audio.duration;
+    }
+  }
+
+  progressEl.addEventListener('click', seek);
+  progressEl.addEventListener('mousedown', () => isDragging = true);
+  document.addEventListener('mousemove', (e) => { if (isDragging) seek(e); });
+  document.addEventListener('mouseup',   () => isDragging = false);
+
+  // Touch
+  progressEl.addEventListener('touchstart', seek, { passive: true });
+  progressEl.addEventListener('touchmove',  seek, { passive: true });
+}
+
+function updateProgressBars() {
+  const audio = PlayerState.audio;
+  if (!audio.duration) return;
+
+  const pct = (audio.currentTime / audio.duration) * 100;
+
+  // Barre lecteur plein écran
+  const bar = document.querySelector('.player-progress-bar');
+  if (bar) bar.style.width = `${pct}%`;
+
+  // Mini-lecteur
+  const miniBar = document.querySelector('.mini-progress-bar');
+  if (miniBar) miniBar.style.width = `${pct}%`;
+
+  updateTimeCodes();
+}
+
+function updateTimeCodes() {
+  const audio = PlayerState.audio;
+  const cur  = formatTime(audio.currentTime || 0);
+  const dur  = formatTime(audio.duration   || 0);
+
+  const times = document.querySelectorAll('.player-times span');
+  if (times[0]) times[0].textContent = cur;
+  if (times[1]) times[1].textContent = dur;
+}
+
+// ═══════════════════════════════════════════════════════
+// VOLUME
+// ═══════════════════════════════════════════════════════
+function bindVolumeBar() {
+  const volBar = document.querySelector('.volume-bar');
+  if (!volBar) return;
+
+  function setVolume(e) {
+    const rect = volBar.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - rect.left;
+    // Volume de 0 à 400% (gain 0.0 → 4.0)
+    const ratio = Math.max(0, Math.min(1, x / rect.width));
+    const gain = ratio * 4.0;
+    applyVolume(gain);
+  }
+
+  volBar.addEventListener('click', setVolume);
+  volBar.addEventListener('touchstart', setVolume, { passive: true });
+  volBar.addEventListener('touchmove',  setVolume, { passive: true });
+}
+
+function applyVolume(gain) {
+  PlayerState.gainValue = gain;
+  if (gainNode) gainNode.gain.value = gain;
+
+  // Couleur selon les paliers (spec GagMusic)
+  const pct = (gain / 4.0) * 100;
+  const fill = document.querySelector('.volume-fill');
+  if (fill) {
+    fill.style.width = `${pct}%`;
+    if (gain <= 1.0)      fill.style.background = 'linear-gradient(to right, white, var(--text))';
+    else if (gain <= 2.0) fill.style.background = 'linear-gradient(to right, white, gold)';
+    else if (gain <= 3.0) fill.style.background = 'linear-gradient(to right, gold, orange)';
+    else                  fill.style.background = 'linear-gradient(to right, orange, red)';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// MISE À JOUR DE L'INTERFACE
+// ═══════════════════════════════════════════════════════
+function updateUI() {
+  updatePlayPauseButtons();
+  updateMiniPlayer(currentTrack());
+  updateFullPlayer(currentTrack());
+  renderLibrary();
+  updateHomeScreen();
+}
+
+function updatePlayPauseButtons() {
+  const icon = PlayerState.isPlaying ? '⏸' : '▶';
+
+  const miniPlay = document.querySelector('.mini-controls .ctrl-btn--play');
+  if (miniPlay) miniPlay.textContent = icon;
+
+  const fullPlay = document.querySelector('.ctrl-btn--play-lg');
+  if (fullPlay) fullPlay.textContent = icon;
+}
+
+function updateMiniPlayer(track) {
+  if (!track) return;
+
+  // Nom & artiste
+  const nameEl   = document.querySelector('.mini-info .track-name');
+  const artistEl = document.querySelector('.mini-info .track-artist');
+  if (nameEl)   nameEl.textContent   = track.title;
+  if (artistEl) artistEl.textContent = track.artist;
+
+  // Pochette
+  const cover = document.querySelector('.mini-content .cover-thumb');
+  if (cover) {
+    if (track.cover) {
+      cover.style.backgroundImage = `url(${track.cover})`;
+      cover.style.backgroundSize  = 'cover';
+      cover.textContent = '';
+    } else {
+      cover.style.backgroundImage = '';
+      cover.textContent = '🎵';
+    }
+  }
+}
+
+function updateFullPlayer(track) {
+  if (!track) return;
+
+  // Titres dans toutes les vues
+  document.querySelectorAll('.player-track').forEach(el => el.textContent = track.title);
+  document.querySelectorAll('.player-artist').forEach(el => el.textContent = track.artist);
+
+  // Pochette
+  const cover = document.querySelector('.player-cover');
+  if (cover) {
+    if (track.cover) {
+      cover.style.backgroundImage = `url(${track.cover})`;
+      cover.style.backgroundSize  = 'cover';
+      cover.style.backgroundPosition = 'center';
+      cover.textContent = '';
+    } else {
+      cover.style.backgroundImage = '';
+      cover.textContent = '🎵';
+    }
+  }
+
+  // Fond flou du lecteur
+  const bg = document.querySelector('.player-bg-cover');
+  if (bg) {
+    if (track.cover) {
+      bg.style.backgroundImage = `url(${track.cover})`;
+      bg.style.backgroundSize  = 'cover';
+      bg.style.backgroundPosition = 'center';
+      bg.style.filter = 'blur(30px) brightness(0.4)';
+      bg.textContent = '';
+    } else {
+      bg.style.backgroundImage = '';
+      bg.style.filter = '';
+      bg.textContent = '🎵';
+    }
+  }
+
+  // Infos vue INFOS
+  setInfoVal('Album',   track.album);
+  setInfoVal('Année',   track.year || '—');
+  setInfoVal('Genre',   track.genre || '—');
+  setInfoVal('Écoutes', track.listenCount || 0);
+}
+
+function setInfoVal(label, value) {
+  const rows = document.querySelectorAll('.info-row');
+  rows.forEach(row => {
+    if (row.querySelector('.info-label')?.textContent === label) {
+      const val = row.querySelector('.info-val');
+      if (val) val.textContent = value;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDU BIBLIOTHÈQUE
+// ═══════════════════════════════════════════════════════
+function renderLibrary() {
+  const list = document.querySelector('.track-list--library');
+  if (!list) return;
+
+  const lib = PlayerState.library;
+
+  if (lib.length === 0) {
+    list.innerHTML = `
+      <li class="empty-library">
+        <div class="empty-icon">🎵</div>
+        <p>Aucun titre importé</p>
+        <span>Appuyez sur SCAN pour importer des fichiers MP3 / M4A</span>
+      </li>`;
+    return;
+  }
+
+  // Tri alphabétique
+  const sorted = [...lib].sort((a, b) => a.title.localeCompare(b.title));
+
+  let html = '';
+  let currentLetter = '';
+
+  sorted.forEach((track, idx) => {
+    const letter = (track.title[0] || '#').toUpperCase();
+    if (letter !== currentLetter) {
+      currentLetter = letter;
+      html += `<li class="alpha-separator">${letter}</li>`;
+    }
+
+    const realIdx = lib.indexOf(track);
+    const isPlaying = realIdx === PlayerState.queueIndex && PlayerState.isPlaying;
+    const coverStyle = track.cover
+      ? `style="background-image:url(${track.cover});background-size:cover;background-position:center"`
+      : '';
+
+    html += `
+      <li class="track-item ${isPlaying ? 'track-item--playing' : ''}"
+          data-index="${realIdx}">
+        <div class="cover-thumb ${isPlaying ? 'cover-thumb--eq' : ''}" ${coverStyle}>
+          ${isPlaying
+            ? '<span class="eq-bars"><span></span><span></span><span></span><span></span><span></span></span>'
+            : track.cover ? '' : '🎵'}
+        </div>
+        <div class="track-meta">
+          <span class="track-name">${escHtml(track.title)}</span>
+          <span class="track-artist">${escHtml(track.artist)} · ${formatTime(track.duration)}</span>
+        </div>
+        <button class="btn-like ${track.liked ? 'liked' : ''}" data-index="${realIdx}">
+          ${track.liked ? '♥' : '♡'}
+        </button>
+        <button class="btn-more" data-index="${realIdx}">···</button>
+      </li>`;
+  });
+
+  list.innerHTML = html;
+
+  // Événements sur les items
+  list.querySelectorAll('.track-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-like') || e.target.closest('.btn-more')) return;
+      const idx = parseInt(item.dataset.index);
+      playTrack(idx);
+    });
+  });
+
+  list.querySelectorAll('.btn-like').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.index);
+      toggleLike(idx);
+    });
+  });
+}
+
+function toggleLike(idx) {
+  const track = PlayerState.library[idx];
+  if (!track) return;
+  track.liked = !track.liked;
+  saveLibrary();
+  renderLibrary();
+}
+
+// ═══════════════════════════════════════════════════════
+// ÉCRAN ACCUEIL — mise à jour dynamique
+// ═══════════════════════════════════════════════════════
+function updateHomeScreen() {
+  const lib = PlayerState.library;
+
+  // Stats du jour
+  const totalMin = Math.round(lib.reduce((s, t) => s + (t.duration || 0), 0) / 60);
+  const statEl = document.querySelector('.today-stats');
+  if (statEl) {
+    statEl.innerHTML = `
+      <span class="stat-item">♪ <strong>${lib.length}</strong> titres</span>
+      <span class="stat-sep">·</span>
+      <span class="stat-item"><strong>${totalMin}</strong> min</span>`;
+  }
+
+  // Section "Continuer l'écoute"
+  const track = currentTrack();
+  if (track) {
+    const cont = document.querySelector('.continue-card .track-name');
+    const contA = document.querySelector('.continue-card .track-artist');
+    if (cont)  cont.textContent  = track.title;
+    if (contA) contA.innerHTML   = `${escHtml(track.artist)}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// PERSISTANCE (localStorage)
+// ═══════════════════════════════════════════════════════
+function saveLibrary() {
+  // On ne sauvegarde pas les src (base64 trop lourds) — seulement les métadonnées
+  const meta = PlayerState.library.map(t => ({
+    id: t.id, filename: t.filename, title: t.title, artist: t.artist,
+    album: t.album, year: t.year, genre: t.genre, duration: t.duration,
+    listenCount: t.listenCount, liked: t.liked, addedAt: t.addedAt, lastPlayed: t.lastPlayed,
+    // cover : URL.createObjectURL ne survit pas aux rechargements → on ignore
+  }));
+  try {
+    localStorage.setItem('gag_library_meta', JSON.stringify(meta));
+    localStorage.setItem('gag_queue_index', PlayerState.queueIndex);
+  } catch(e) { /* quota dépassé */ }
+}
+
+function restoreLibrary() {
+  try {
+    const raw = localStorage.getItem('gag_library_meta');
+    if (raw) {
+      const meta = JSON.parse(raw);
+      // On restaure les métadonnées mais pas les src (fichiers à réimporter)
+      PlayerState.library = meta.map(m => ({ ...m, src: null, cover: null }));
+      renderLibrary();
+      updateHomeScreen();
+    }
+  } catch(e) { /* ignore */ }
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILITAIRES
+// ═══════════════════════════════════════════════════════
+function currentTrack() {
+  return PlayerState.library[PlayerState.queueIndex] || null;
+}
+
+function formatTime(sec) {
+  if (!sec || isNaN(sec)) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─── Toast de notification ────────────────────────────
+let toastTimeout;
+function showToast(msg) {
+  let toast = document.getElementById('gag-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'gag-toast';
+    toast.style.cssText = `
+      position:fixed; bottom:140px; left:50%; transform:translateX(-50%);
+      background:var(--card2); border:1px solid var(--border); color:var(--text);
+      padding:10px 20px; border-radius:20px; font-size:0.85rem; z-index:999;
+      opacity:0; transition:opacity 0.25s; white-space:nowrap;
+      box-shadow:0 4px 20px rgba(0,0,0,0.4);
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.style.opacity = '0', 2500);
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════
+window.GagPlayer = {
+  state: PlayerState,
+  playTrack,
+  togglePlayPause,
+  playNext,
+  playPrev,
+  skipForward,
+  skipBackward,
+  toggleShuffle,
+  toggleRepeat,
+  applyVolume,
+  currentTrack,
+  formatTime,
+  showToast,
+};
